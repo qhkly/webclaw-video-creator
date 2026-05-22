@@ -1,0 +1,40 @@
+{
+  "name": "webclaw-video-creator",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "tauri": "tauri",
+    "tauri:dev": "tauri dev",
+    "tauri:build": "tauri build",
+    "remotion:preview": "remotion preview remotion/src/index.ts",
+    "remotion:render": "node scripts/render.mjs"
+  },
+  "dependencies": {
+    "@duyquangnvx/edge-tts": "^3.0.3",
+    "@remotion/bundler": "^4.0.355",
+    "@remotion/player": "^4.0.355",
+    "@tauri-apps/api": "^2.9.0",
+    "@tauri-apps/plugin-dialog": "^2.4.0",
+    "@tauri-apps/plugin-fs": "^2.4.0",
+    "ffmpeg-static": "^5.2.0",
+    "lucide-react": "^0.468.0",
+    "node-edge-tts": "^1.2.10",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-syntax-highlighter": "^15.5.0",
+    "remotion": "^4.0.355",
+    "zustand": "^5.0.2"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.4.0",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.3",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.11"
+  }
+}

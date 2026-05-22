@@ -1,0 +1,13 @@
+{
+  "name": "@webclaw-video-creator/remotion",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "dependencies": {
+    "@remotion/renderer": "^4.0.355",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-syntax-highlighter": "^15.5.0",
+    "remotion": "^4.0.355"
+  }
+}
