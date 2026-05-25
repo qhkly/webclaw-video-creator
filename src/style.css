@@ -77,6 +77,8 @@ label span,
   border-right: 1px solid #e0e6ef;
   background: #ffffff;
   padding: 24px 16px;
+  display: flex;
+  flex-direction: column;
 }
 
 .brand {
@@ -250,4 +252,25 @@ label span,
 
 .result-path {
   word-break: break-all;
+}
+
+.locale-switcher {
+  margin-top: auto;
+  padding-top: 16px;
+  display: flex;
+  gap: 6px;
+}
+
+.locale-btn {
+  flex: 1;
+  min-height: 30px;
+  padding: 0 8px;
+  font-size: 12px;
+  border-radius: 6px;
+}
+
+.locale-btn.active {
+  border-color: #0f766e;
+  background: #ecfdf5;
+  color: #0f766e;
 }

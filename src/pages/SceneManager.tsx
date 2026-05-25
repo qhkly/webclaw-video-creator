@@ -1,6 +1,7 @@
 import SceneCard from '../components/SceneCard';
 import { generateTts } from '../lib/tauri-bridge';
 import { useVideoStore } from '../store/useVideoStore';
+import { useI18n } from '../i18n';
 
 export default function SceneManager() {
   const scenes = useVideoStore((state) => state.scenes);
@@ -8,13 +9,14 @@ export default function SceneManager() {
   const engine = useVideoStore((state) => state.engine);
   const updateScene = useVideoStore((state) => state.updateScene);
   const moveScene = useVideoStore((state) => state.moveScene);
+  const { t } = useI18n();
 
   return (
     <section className="page">
       <header className="page-header">
         <div>
-          <h1>场景管理器</h1>
-          <p>编辑模板、旁白、时长和渲染参数</p>
+          <h1>{t.sceneManager.title}</h1>
+          <p>{t.sceneManager.desc}</p>
         </div>
       </header>
       <div className="scene-list">

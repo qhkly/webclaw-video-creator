@@ -1,17 +1,19 @@
 import { Player } from '@remotion/player';
 import { VideoComposition } from '../../remotion/src/VideoComposition';
 import { useVideoStore } from '../store/useVideoStore';
+import { useI18n } from '../i18n';
 
 export default function PreviewPage() {
   const scenes = useVideoStore((state) => state.scenes);
   const durationInFrames = Math.max(1, scenes.reduce((total, scene) => total + scene.duration * 30, 0));
+  const { t } = useI18n();
 
   return (
     <section className="page preview-page">
       <header className="page-header">
         <div>
-          <h1>实时预览</h1>
-          <p>Remotion Player 在 WebView 中直接渲染当前 Scene[]</p>
+          <h1>{t.preview.title}</h1>
+          <p>{t.preview.desc}</p>
         </div>
       </header>
       <div className="player-frame">

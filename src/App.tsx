@@ -4,17 +4,18 @@ import PreviewPage from './pages/PreviewPage';
 import SceneManager from './pages/SceneManager';
 import ScriptEditor from './pages/ScriptEditor';
 import { useVideoStore } from './store/useVideoStore';
+import { useI18n, type Locale } from './i18n';
 
-const nav = [
-  { key: 'script', label: '脚本', icon: PenLine },
-  { key: 'scenes', label: '场景', icon: ListVideo },
-  { key: 'preview', label: '预览', icon: LayoutDashboard },
-  { key: 'export', label: '导出', icon: Film },
-] as const;
+const NAV_KEYS = ['script', 'scenes', 'preview', 'export'] as const;
+const NAV_ICONS = { script: PenLine, scenes: ListVideo, preview: LayoutDashboard, export: Film };
+
+const LOCALES: Locale[] = ['zh-CN', 'en-US'];
+const LOCALE_LABELS: Record<Locale, string> = { 'zh-CN': '中文', 'en-US': 'EN' };
 
 export default function App() {
   const activePage = useVideoStore((state) => state.activePage);
   const setActivePage = useVideoStore((state) => state.setActivePage);
+  const { t, locale, setLocale } = useI18n();
 
   return (
     <div className="app-shell">
@@ -24,21 +25,33 @@ export default function App() {
           <strong>Video Creator</strong>
         </div>
         <nav className="nav-list">
-          {nav.map((item) => {
-            const Icon = item.icon;
+          {NAV_KEYS.map((key) => {
+            const Icon = NAV_ICONS[key];
+            const label = t.nav[key];
             return (
               <button
-                className={activePage === item.key ? 'nav-item active' : 'nav-item'}
-                key={item.key}
-                onClick={() => setActivePage(item.key)}
-                title={item.label}
+                className={activePage === key ? 'nav-item active' : 'nav-item'}
+                key={key}
+                onClick={() => setActivePage(key)}
+                title={label}
               >
                 <Icon size={18} />
-                <span>{item.label}</span>
+                <span>{label}</span>
               </button>
             );
           })}
         </nav>
+        <div className="locale-switcher">
+          {LOCALES.map((loc) => (
+            <button
+              key={loc}
+              className={locale === loc ? 'locale-btn active' : 'locale-btn'}
+              onClick={() => setLocale(loc)}
+            >
+              {LOCALE_LABELS[loc]}
+            </button>
+          ))}
+        </div>
       </aside>
       <main className="workspace">
         {activePage === 'script' && <ScriptEditor />}

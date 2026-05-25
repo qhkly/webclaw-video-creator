@@ -1,5 +1,6 @@
 import { ArrowDown, ArrowUp, Volume2 } from 'lucide-react';
 import TemplateSelector from './TemplateSelector';
+import { useI18n } from '../i18n';
 import type { VideoScene } from '../types';
 
 interface Props {
@@ -11,27 +12,29 @@ interface Props {
 }
 
 export default function SceneCard({ scene, index, onUpdate, onMove, onGenerateTts }: Props) {
+  const { t } = useI18n();
+
   return (
     <article className="scene-card">
       <div className="scene-card-header">
         <span className="scene-index">{String(index + 1).padStart(2, '0')}</span>
         <input value={scene.title} onChange={(event) => onUpdate({ title: event.target.value })} />
         <div className="icon-row">
-          <button title="上移" onClick={() => onMove(-1)}>
+          <button title={t.sceneCard.moveUp} onClick={() => onMove(-1)}>
             <ArrowUp size={16} />
           </button>
-          <button title="下移" onClick={() => onMove(1)}>
+          <button title={t.sceneCard.moveDown} onClick={() => onMove(1)}>
             <ArrowDown size={16} />
           </button>
         </div>
       </div>
       <div className="scene-fields">
         <label>
-          <span>模板</span>
+          <span>{t.sceneCard.template}</span>
           <TemplateSelector value={scene.template} onChange={(template) => onUpdate({ template })} />
         </label>
         <label>
-          <span>时长</span>
+          <span>{t.sceneCard.duration}</span>
           <input
             type="number"
             min={2}
@@ -41,11 +44,11 @@ export default function SceneCard({ scene, index, onUpdate, onMove, onGenerateTt
         </label>
       </div>
       <label>
-        <span>旁白</span>
+        <span>{t.sceneCard.narration}</span>
         <textarea value={scene.narration} onChange={(event) => onUpdate({ narration: event.target.value })} />
       </label>
       <label>
-        <span>模板 Props JSON</span>
+        <span>{t.sceneCard.propsJson}</span>
         <textarea
           className="mono"
           value={JSON.stringify(scene.props, null, 2)}
@@ -61,7 +64,7 @@ export default function SceneCard({ scene, index, onUpdate, onMove, onGenerateTt
       <div className="scene-actions">
         <button className="primary subtle" onClick={onGenerateTts}>
           <Volume2 size={16} />
-          生成配音
+          {t.sceneCard.generateTts}
         </button>
         {scene.audio && <span>{scene.audio.duration.toFixed(1)}s</span>}
       </div>
