@@ -104,30 +104,6 @@ label {
   -webkit-app-region: drag;
 }
 
-.traffic {
-  display: flex;
-  gap: 8px;
-}
-
-.traffic i {
-  display: block;
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-}
-
-.traffic .r {
-  background: #ff5f57;
-}
-
-.traffic .y {
-  background: #febc2e;
-}
-
-.traffic .g {
-  background: #28c840;
-}
-
 .tb-project {
   position: absolute;
   left: 50%;

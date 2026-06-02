@@ -26,11 +26,6 @@ export default function App() {
   return (
     <div className="app">
       <header className="titlebar">
-        <div className="traffic">
-          <i className="r" />
-          <i className="y" />
-          <i className="g" />
-        </div>
         <div className="tb-project">
           <span className="dot" />
           <span>{t.app.projectName}</span>
