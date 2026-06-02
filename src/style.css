@@ -1025,6 +1025,7 @@ select {
 
 .scene-player-frame {
   display: flex;
+  align-items: center;
   justify-content: center;
   width: min(100%, 900px);
   height: min(58vh, 520px);
@@ -1403,6 +1404,7 @@ input[type="range"] {
 
 .player-frame {
   display: flex;
+  align-items: center;
   justify-content: center;
   height: min(70vh, 620px);
   overflow: hidden;

@@ -225,7 +225,7 @@ export default function SceneManager() {
                 className={active ? 'scene-thumb active' : 'scene-thumb'}
                 onClick={() => setSelectedId(scene.id)}
               >
-                <div className="thumb-stage">
+                <div className="thumb-stage" style={{ aspectRatio: ASPECT_CSS[aspect] }}>
                   <span>{String(index + 1).padStart(2, '0')}</span>
                   <SceneVisual scene={scene} compact />
                   <em>{scene.duration}s</em>

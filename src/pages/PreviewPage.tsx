@@ -49,6 +49,7 @@ export default function PreviewPage() {
             className={scene.id === selectedScene?.id ? 'preview-thumb active' : 'preview-thumb'}
             key={scene.id}
             onClick={() => setSelectedId(scene.id)}
+            style={{ aspectRatio: ASPECT_CSS[aspect] }}
           >
             <SceneVisual scene={scene} compact />
             <span>{String(index + 1).padStart(2, '0')}</span>
