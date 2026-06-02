@@ -16,15 +16,15 @@ export default function VoiceSelector({ voice, engine, onVoiceChange, onEngineCh
   return (
     <div className="voice-grid">
       <label>
-        <span>{t.voiceSelector.engine}</span>
-        <select value={engine} onChange={(event) => onEngineChange(event.target.value as VoiceEngine)}>
+        <span className="field-label">{t.voiceSelector.engine}</span>
+        <select className="select" value={engine} onChange={(event) => onEngineChange(event.target.value as VoiceEngine)}>
           <option value="edge">Edge TTS</option>
           <option value="f5">F5-TTS</option>
         </select>
       </label>
       <label>
-        <span>{t.voiceSelector.voice}</span>
-        <select value={voice} onChange={(event) => onVoiceChange(event.target.value)}>
+        <span className="field-label">{t.voiceSelector.voice}</span>
+        <select className="select" value={voice} onChange={(event) => onVoiceChange(event.target.value)}>
           {VOICE_KEYS.map((key) => (
             <option value={key} key={key}>
               {t.voices[key] ?? key}

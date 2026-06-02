@@ -38,7 +38,14 @@ pub async fn save_scenes_json(
 }
 
 #[tauri::command]
-pub async fn render_video(app: AppHandle, scenes_json: String, output_dir: String) -> Result<String, String> {
+pub async fn render_video(
+    app: AppHandle,
+    scenes_json: String,
+    output_dir: String,
+    aspect: String,
+    resolution: String,
+    format: String,
+) -> Result<String, String> {
     let project_dir = project_dir(&app)?;
     let script_path = project_dir.join("scripts").join("render.mjs");
     let mut child = Command::new("node")
@@ -48,6 +55,12 @@ pub async fn render_video(app: AppHandle, scenes_json: String, output_dir: Strin
         .arg(scenes_json)
         .arg("--outputDir")
         .arg(&output_dir)
+        .arg("--aspect")
+        .arg(&aspect)
+        .arg("--resolution")
+        .arg(&resolution)
+        .arg("--format")
+        .arg(&format)
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
         .spawn()

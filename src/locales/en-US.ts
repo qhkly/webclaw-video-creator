@@ -1,6 +1,12 @@
 import type zhCN from './zh-CN';
 
 const enUS: typeof zhCN = {
+  app: {
+    projectName: 'Untitled project',
+    workflow: 'Workflow',
+    voiceProgress: 'Voice progress',
+    voiceProgressDesc: 'scenes have audio',
+  },
   nav: {
     script: 'Script',
     scenes: 'Scenes',
@@ -13,6 +19,11 @@ const enUS: typeof zhCN = {
     placeholder: 'Separate each scene with a blank line. The first line becomes the scene title.',
     scenesUnit: 'scenes',
     minUnit: 'min',
+    aspectLabels: {
+      '16:9': 'Landscape · YouTube',
+      '9:16': 'Portrait · Shorts/TikTok',
+      '1:1': 'Square · Instagram',
+    },
   },
   sceneManager: {
     title: 'Scene Manager',

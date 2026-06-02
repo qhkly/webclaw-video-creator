@@ -1,6 +1,7 @@
-export type SceneTemplate = 'TitleSlide' | 'CodeExplainer' | 'BulletPoints' | 'ImageFrame';
+export type SceneTemplate = 'TitleSlide' | 'BulletPoints' | 'BigStat' | 'Quote' | 'CodeExplainer' | 'ImageFrame';
 
 export type VoiceEngine = 'edge' | 'f5';
+export type { Aspect, Format, Resolution } from './constants/aspect';
 
 export interface AudioAsset {
   path: string;

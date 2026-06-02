@@ -1,4 +1,5 @@
 import { AbsoluteFill, interpolate, spring, useVideoConfig } from 'remotion';
+import { useScale } from '../useScale';
 
 interface Props {
   title?: unknown;
@@ -10,6 +11,7 @@ interface Props {
 
 export default function TitleSlide({ title, subtitle, bgColor, fallbackTitle, frame }: Props) {
   const { fps } = useVideoConfig();
+  const scale = useScale();
   const progress = spring({ frame, fps, config: { damping: 18 } });
   const opacity = interpolate(frame, [0, 20], [0, 1], { extrapolateRight: 'clamp' });
 
@@ -17,7 +19,7 @@ export default function TitleSlide({ title, subtitle, bgColor, fallbackTitle, fr
     <AbsoluteFill
       style={{
         justifyContent: 'center',
-        padding: 150,
+        padding: 150 * scale,
         background: String(bgColor || '#111827'),
         color: '#f8fafc',
       }}
@@ -25,19 +27,19 @@ export default function TitleSlide({ title, subtitle, bgColor, fallbackTitle, fr
       <h1
         style={{
           margin: 0,
-          fontSize: 104,
+          fontSize: 104 * scale,
           lineHeight: 1,
           opacity,
-          transform: `translateY(${(1 - progress) * 80}px)`,
+          transform: `translateY(${(1 - progress) * 80 * scale}px)`,
         }}
       >
         {String(title || fallbackTitle)}
       </h1>
       <p
         style={{
-          margin: '36px 0 0',
-          maxWidth: 1200,
-          fontSize: 44,
+          margin: `${36 * scale}px 0 0`,
+          maxWidth: 1200 * scale,
+          fontSize: 44 * scale,
           lineHeight: 1.25,
           color: '#cbd5e1',
           opacity: interpolate(frame, [15, 35], [0, 1], { extrapolateRight: 'clamp' }),

@@ -1,7 +1,8 @@
 import { create } from 'zustand';
+import type { Aspect } from '../constants/aspect';
 import type { SceneTemplate, VideoScene, VoiceEngine } from '../types';
 
-const templates: SceneTemplate[] = ['TitleSlide', 'CodeExplainer', 'BulletPoints', 'ImageFrame'];
+const templates: SceneTemplate[] = ['TitleSlide', 'BulletPoints', 'BigStat', 'Quote'];
 
 const defaultScenes: VideoScene[] = [
   {
@@ -12,7 +13,8 @@ const defaultScenes: VideoScene[] = [
     template: 'TitleSlide',
     duration: 5,
     props: {
-      title: 'WebClaw Video Creator',
+      kicker: 'WEBCLAW',
+      title: 'Video Creator',
       subtitle: 'Tauri + Remotion + Edge TTS',
       bgColor: '#0f172a',
     },
@@ -25,9 +27,22 @@ const defaultScenes: VideoScene[] = [
     template: 'BulletPoints',
     duration: 8,
     props: {
-      title: 'Pipeline',
+      title: '核心流程',
       bullets: ['脚本拆分', 'Edge TTS 配音', 'Remotion 模板渲染', 'FFmpeg 合成'],
-      accent: '#22c55e',
+      bgColor: '#0b1220',
+    },
+  },
+  {
+    id: crypto.randomUUID(),
+    title: '效率提升',
+    text: '相比手动剪辑，整体效率提升约五倍。',
+    narration: '相比手动剪辑，整体效率提升约五倍。',
+    template: 'BigStat',
+    duration: 4,
+    props: {
+      stat: '5×',
+      label: '相比手动剪辑的效率提升',
+      bgColor: '#134e4a',
     },
   },
 ];
@@ -35,9 +50,11 @@ const defaultScenes: VideoScene[] = [
 interface VideoStore {
   scenes: VideoScene[];
   activePage: 'script' | 'scenes' | 'preview' | 'export';
+  aspect: Aspect;
   voice: string;
   engine: VoiceEngine;
   setActivePage: (page: VideoStore['activePage']) => void;
+  setAspect: (aspect: Aspect) => void;
   setVoice: (voice: string) => void;
   setEngine: (engine: VoiceEngine) => void;
   setScenes: (scenes: VideoScene[]) => void;
@@ -49,9 +66,11 @@ interface VideoStore {
 export const useVideoStore = create<VideoStore>((set) => ({
   scenes: defaultScenes,
   activePage: 'script',
+  aspect: '16:9',
   voice: 'zh-CN-YunxiNeural',
   engine: 'edge',
   setActivePage: (activePage) => set({ activePage }),
+  setAspect: (aspect) => set({ aspect }),
   setVoice: (voice) => set({ voice }),
   setEngine: (engine) => set({ engine }),
   setScenes: (scenes) => set({ scenes }),
@@ -88,13 +107,13 @@ export const useVideoStore = create<VideoStore>((set) => ({
             template,
             duration: Math.max(5, Math.ceil(part.length / 28)),
             props:
-              template === 'CodeExplainer'
-                ? { code: part, language: 'typescript', highlightLines: [1], caption: title }
+              template === 'BigStat'
+                ? { stat: '5×', label: title, bgColor: '#134e4a' }
+                : template === 'Quote'
+                  ? { quote: part, author: 'WebClaw', bgColor: '#0a0f1c' }
                 : template === 'BulletPoints'
-                  ? { title, bullets: part.split('\n').slice(1, 5), accent: '#0ea5e9' }
-                  : template === 'ImageFrame'
-                    ? { imageSrc: '', caption: title, subtitle: part }
-                    : { title, subtitle: part.slice(title.length).trim(), bgColor: '#111827' },
+                  ? { title, bullets: part.split(/[。！？\n]/).filter(Boolean).slice(0, 4), bgColor: '#0b1220' }
+                  : { kicker: 'WEBCLAW', title, subtitle: part.slice(title.length).trim(), bgColor: '#0f172a' },
           };
         }),
     }),

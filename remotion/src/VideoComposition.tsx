@@ -1,12 +1,16 @@
 import { AbsoluteFill, Sequence, useCurrentFrame, useVideoConfig } from 'remotion';
+import type { Aspect } from '../../src/constants/aspect';
 import type { VideoScene } from '../../src/types';
 import BulletPoints from './compositions/BulletPoints';
+import BigStat from './compositions/BigStat';
 import CodeExplainer from './compositions/CodeExplainer';
 import ImageFrame from './compositions/ImageFrame';
+import Quote from './compositions/Quote';
 import TitleSlide from './compositions/TitleSlide';
 
 interface Props {
   scenes?: VideoScene[];
+  aspect?: Aspect;
 }
 
 export function VideoComposition({ scenes = [] }: Props) {
@@ -38,6 +42,12 @@ function SceneRenderer({ scene }: { scene: VideoScene }) {
   }
   if (scene.template === 'BulletPoints') {
     return <BulletPoints {...props} fallbackTitle={scene.title} frame={frame} />;
+  }
+  if (scene.template === 'BigStat') {
+    return <BigStat {...props} fallbackTitle={scene.title} frame={frame} />;
+  }
+  if (scene.template === 'Quote') {
+    return <Quote {...props} fallbackTitle={scene.title} frame={frame} />;
   }
   if (scene.template === 'ImageFrame') {
     return <ImageFrame {...props} fallbackTitle={scene.title} frame={frame} />;

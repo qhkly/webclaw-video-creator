@@ -1,4 +1,10 @@
 const zhCN = {
+  app: {
+    projectName: '未命名项目',
+    workflow: '制作流程',
+    voiceProgress: '配音进度',
+    voiceProgressDesc: '个场景已生成配音',
+  },
   nav: {
     script: '脚本',
     scenes: '场景',
@@ -11,6 +17,11 @@ const zhCN = {
     placeholder: '每个场景用空行分隔。第一行会作为场景标题。',
     scenesUnit: '个场景',
     minUnit: '分钟',
+    aspectLabels: {
+      '16:9': '横屏 · YouTube',
+      '9:16': '竖屏 · 抖音/Shorts',
+      '1:1': '方形 · Instagram',
+    },
   },
   sceneManager: {
     title: '场景管理器',

@@ -1,6 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import type { RenderProgress, VideoScene, VoiceEngine } from '../types';
+import type { Aspect, Format, RenderProgress, Resolution, VideoScene, VoiceEngine } from '../types';
 
 export function generateTts(input: {
   text: string;
@@ -11,7 +11,13 @@ export function generateTts(input: {
   return invoke<number>('generate_tts', input);
 }
 
-export function renderVideo(input: { scenesJson: string; outputDir: string }) {
+export function renderVideo(input: {
+  scenesJson: string;
+  outputDir: string;
+  aspect: Aspect;
+  resolution: Resolution;
+  format: Format;
+}) {
   return invoke<string>('render_video', input);
 }
 
