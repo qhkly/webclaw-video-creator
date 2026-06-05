@@ -1,6 +1,16 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import type { Aspect, Format, RenderProgress, Resolution, VideoScene, VoiceEngine } from '../types';
+import type {
+  Aspect,
+  CreatorSettings,
+  FetchAssetsResult,
+  Format,
+  RenderProgress,
+  Resolution,
+  TtsResult,
+  VideoScene,
+  VoiceEngine,
+} from '../types';
 
 export function generateTts(input: {
   text: string;
@@ -8,7 +18,25 @@ export function generateTts(input: {
   output: string;
   engine: VoiceEngine;
 }) {
-  return invoke<number>('generate_tts', input);
+  return invoke<TtsResult>('generate_tts', input);
+}
+
+export function fetchAssets(input: {
+  query: string;
+  count: number;
+  orientation: 'landscape' | 'portrait' | 'square';
+  apiKey: string;
+  projectDir?: string;
+}) {
+  return invoke<FetchAssetsResult>('fetch_assets', input);
+}
+
+export function getSettings() {
+  return invoke<CreatorSettings>('get_settings');
+}
+
+export function saveSettings(input: { settings: CreatorSettings }) {
+  return invoke<CreatorSettings>('save_settings', input);
 }
 
 export function renderVideo(input: {
@@ -17,6 +45,7 @@ export function renderVideo(input: {
   aspect: Aspect;
   resolution: Resolution;
   format: Format;
+  captionsJson?: string;
 }) {
   return invoke<string>('render_video', input);
 }

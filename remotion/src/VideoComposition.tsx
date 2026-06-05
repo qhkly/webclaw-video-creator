@@ -1,19 +1,23 @@
-import { AbsoluteFill, Sequence, useCurrentFrame, useVideoConfig } from 'remotion';
+import { AbsoluteFill, Audio, Sequence, useCurrentFrame, useVideoConfig } from 'remotion';
 import type { Aspect } from '../../src/constants/aspect';
-import type { VideoScene } from '../../src/types';
+import type { CaptionSettings, VideoScene } from '../../src/types';
+import { Background } from './Background';
+import { Captions } from './Captions';
 import BulletPoints from './compositions/BulletPoints';
 import BigStat from './compositions/BigStat';
 import CodeExplainer from './compositions/CodeExplainer';
 import ImageFrame from './compositions/ImageFrame';
 import Quote from './compositions/Quote';
 import TitleSlide from './compositions/TitleSlide';
+import { mediaSrc } from './media';
 
 interface Props {
   scenes?: VideoScene[];
   aspect?: Aspect;
+  captions?: CaptionSettings;
 }
 
-export function VideoComposition({ scenes = [] }: Props) {
+export function VideoComposition({ scenes = [], captions }: Props) {
   const { fps } = useVideoConfig();
   let from = 0;
 
@@ -25,32 +29,30 @@ export function VideoComposition({ scenes = [] }: Props) {
         from += durationInFrames;
         return (
           <Sequence from={sequenceFrom} durationInFrames={durationInFrames} key={scene.id}>
+            {scene.audio?.path && <Audio src={mediaSrc(scene.audio.path)} />}
             <SceneRenderer scene={scene} />
           </Sequence>
         );
       })}
+      <Captions scenes={scenes} settings={captions} />
     </AbsoluteFill>
   );
 }
 
 function SceneRenderer({ scene }: { scene: VideoScene }) {
   const frame = useCurrentFrame();
-  const props = scene.props;
+  const hasBackground = Boolean(scene.background?.assetPath && scene.background.kind !== 'none');
+  const props = hasBackground ? { ...scene.props, bgColor: 'rgba(2, 6, 23, 0.46)' } : scene.props;
 
-  if (scene.template === 'CodeExplainer') {
-    return <CodeExplainer {...props} fallbackTitle={scene.title} frame={frame} />;
-  }
-  if (scene.template === 'BulletPoints') {
-    return <BulletPoints {...props} fallbackTitle={scene.title} frame={frame} />;
-  }
-  if (scene.template === 'BigStat') {
-    return <BigStat {...props} fallbackTitle={scene.title} frame={frame} />;
-  }
-  if (scene.template === 'Quote') {
-    return <Quote {...props} fallbackTitle={scene.title} frame={frame} />;
-  }
-  if (scene.template === 'ImageFrame') {
-    return <ImageFrame {...props} fallbackTitle={scene.title} frame={frame} />;
-  }
-  return <TitleSlide {...props} fallbackTitle={scene.title} frame={frame} />;
+  return (
+    <AbsoluteFill>
+      <Background background={scene.background} />
+      {scene.template === 'CodeExplainer' && <CodeExplainer {...props} fallbackTitle={scene.title} frame={frame} />}
+      {scene.template === 'BulletPoints' && <BulletPoints {...props} fallbackTitle={scene.title} frame={frame} />}
+      {scene.template === 'BigStat' && <BigStat {...props} fallbackTitle={scene.title} frame={frame} />}
+      {scene.template === 'Quote' && <Quote {...props} fallbackTitle={scene.title} frame={frame} />}
+      {scene.template === 'ImageFrame' && <ImageFrame {...props} fallbackTitle={scene.title} frame={frame} />}
+      {scene.template === 'TitleSlide' && <TitleSlide {...props} fallbackTitle={scene.title} frame={frame} />}
+    </AbsoluteFill>
+  );
 }

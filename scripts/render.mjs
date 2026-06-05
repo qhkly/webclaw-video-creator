@@ -22,10 +22,14 @@ if (!args.scenes) {
 }
 
 await mkdir(outputDir, { recursive: true });
+await mkdir(resolve('.video-work/assets'), { recursive: true });
 const scenes = JSON.parse(await readFile(scenesPath, 'utf8'));
 inputProps.scenes = scenes;
+if (args.captions) {
+  inputProps.captions = JSON.parse(args.captions);
+}
 const entryPoint = resolve('remotion/src/index.ts');
-const serveUrl = await bundle({ entryPoint });
+const serveUrl = await bundle({ entryPoint, publicDir: resolve('.video-work/assets') });
 const composition = await selectComposition({
   serveUrl,
   id: 'WebClawVideo',

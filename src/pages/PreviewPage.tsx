@@ -9,6 +9,7 @@ import { useI18n } from '../i18n';
 export default function PreviewPage() {
   const scenes = useVideoStore((state) => state.scenes);
   const aspect = useVideoStore((state) => state.aspect);
+  const captions = useVideoStore((state) => state.captions);
   const { t } = useI18n();
   const totalSeconds = scenes.reduce((total, scene) => total + scene.duration, 0);
   const durationInFrames = Math.max(1, scenes.reduce((total, scene) => total + scene.duration * 30, 0));
@@ -34,7 +35,7 @@ export default function PreviewPage() {
       <div className="player-frame card">
         <Player
           component={VideoComposition}
-          inputProps={{ scenes, aspect }}
+          inputProps={{ scenes, aspect, captions }}
           durationInFrames={durationInFrames}
           compositionWidth={dimensions.width}
           compositionHeight={dimensions.height}

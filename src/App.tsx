@@ -1,15 +1,18 @@
-import { Download, Film, LayoutDashboard, ListVideo, PenLine, Play, Volume2 } from 'lucide-react';
+import { Download, Film, LayoutDashboard, ListVideo, PenLine, Play, Settings, Volume2 } from 'lucide-react';
+import { useEffect } from 'react';
 import ExportPage from './pages/ExportPage';
 import PreviewPage from './pages/PreviewPage';
 import SceneManager from './pages/SceneManager';
 import ScriptEditor from './pages/ScriptEditor';
+import SettingsPanel from './pages/SettingsPanel';
 import ThemePanel from './components/ThemePanel';
+import { getSettings } from './lib/tauri-bridge';
 import { useVideoStore } from './store/useVideoStore';
 import { useI18n, type Locale } from './i18n';
 
-const NAV_KEYS = ['script', 'scenes', 'preview', 'export'] as const;
-const NAV_ICONS = { script: PenLine, scenes: ListVideo, preview: LayoutDashboard, export: Film };
-const NAV_STEPS = { script: '01', scenes: '02', preview: '03', export: '04' };
+const NAV_KEYS = ['script', 'scenes', 'preview', 'export', 'settings'] as const;
+const NAV_ICONS = { script: PenLine, scenes: ListVideo, preview: LayoutDashboard, export: Film, settings: Settings };
+const NAV_STEPS = { script: '01', scenes: '02', preview: '03', export: '04', settings: '05' };
 
 const LOCALES: Locale[] = ['zh-CN', 'en-US'];
 const LOCALE_LABELS: Record<Locale, string> = { 'zh-CN': '中文', 'en-US': 'EN' };
@@ -17,11 +20,18 @@ const LOCALE_LABELS: Record<Locale, string> = { 'zh-CN': '中文', 'en-US': 'EN'
 export default function App() {
   const activePage = useVideoStore((state) => state.activePage);
   const setActivePage = useVideoStore((state) => state.setActivePage);
+  const setSettings = useVideoStore((state) => state.setSettings);
   const scenes = useVideoStore((state) => state.scenes);
   const aspect = useVideoStore((state) => state.aspect);
   const { t, locale, setLocale } = useI18n();
   const totalSeconds = scenes.reduce((total, scene) => total + scene.duration, 0);
   const voicedCount = scenes.filter((scene) => scene.audio).length;
+
+  useEffect(() => {
+    void getSettings()
+      .then(setSettings)
+      .catch(() => {});
+  }, [setSettings]);
 
   return (
     <div className="app">
@@ -107,6 +117,7 @@ export default function App() {
           {activePage === 'scenes' && <SceneManager />}
           {activePage === 'preview' && <PreviewPage />}
           {activePage === 'export' && <ExportPage />}
+          {activePage === 'settings' && <SettingsPanel />}
         </main>
       </div>
     </div>

@@ -10,6 +10,7 @@ import type { Format, RenderProgress, Resolution } from '../types';
 export default function ExportPage() {
   const scenes = useVideoStore((state) => state.scenes);
   const aspect = useVideoStore((state) => state.aspect);
+  const captions = useVideoStore((state) => state.captions);
   const voice = useVideoStore((state) => state.voice);
   const engine = useVideoStore((state) => state.engine);
   const setVoice = useVideoStore((state) => state.setVoice);
@@ -120,7 +121,7 @@ export default function ExportPage() {
           disabled={!outputDir || running}
           onClick={async () => {
             const scenesJson = await saveScenes({ scenes, outputDir });
-            const output = await renderVideo({ scenesJson, outputDir, aspect, resolution, format });
+            const output = await renderVideo({ scenesJson, outputDir, aspect, resolution, format, captionsJson: JSON.stringify(captions) });
             setResult(output);
           }}
         >

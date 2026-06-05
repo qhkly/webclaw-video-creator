@@ -13,6 +13,7 @@ import {
   Pause,
   Play,
   Quote,
+  Search,
   Sparkles,
   Trash2,
   Type,
@@ -23,10 +24,10 @@ import { VideoComposition } from '../../remotion/src/VideoComposition';
 import SceneVisual from '../components/SceneVisual';
 import { templateLabels, templates } from '../components/TemplateSelector';
 import { ASPECT_CSS, ASPECT_DIMENSIONS } from '../constants/aspect';
-import { generateTts } from '../lib/tauri-bridge';
+import { fetchAssets, generateTts } from '../lib/tauri-bridge';
 import { useVideoStore } from '../store/useVideoStore';
 import { useI18n } from '../i18n';
-import type { SceneTemplate } from '../types';
+import type { AssetCandidate, SceneTemplate } from '../types';
 
 const TEMPLATE_ICONS = {
   TitleSlide: Type,
@@ -42,6 +43,8 @@ export default function SceneManager() {
   const aspect = useVideoStore((state) => state.aspect);
   const voice = useVideoStore((state) => state.voice);
   const engine = useVideoStore((state) => state.engine);
+  const settings = useVideoStore((state) => state.settings);
+  const captions = useVideoStore((state) => state.captions);
   const setScenes = useVideoStore((state) => state.setScenes);
   const updateScene = useVideoStore((state) => state.updateScene);
   const moveScene = useVideoStore((state) => state.moveScene);
@@ -51,6 +54,9 @@ export default function SceneManager() {
   const [advanced, setAdvanced] = useState(false);
   const [isScenePlaying, setIsScenePlaying] = useState(false);
   const [currentFrame, setCurrentFrame] = useState(0);
+  const [assetQuery, setAssetQuery] = useState('');
+  const [assetCandidates, setAssetCandidates] = useState<AssetCandidate[]>([]);
+  const [assetStatus, setAssetStatus] = useState('');
   const selectedScene = useMemo(
     () => scenes.find((scene) => scene.id === selectedId) ?? scenes[0],
     [scenes, selectedId],
@@ -268,7 +274,7 @@ export default function SceneManager() {
               ref={playerRef}
               key={selectedScene.id}
               component={VideoComposition}
-              inputProps={{ scenes: [selectedScene], aspect }}
+              inputProps={{ scenes: [selectedScene], aspect, captions }}
               durationInFrames={selectedDuration}
               compositionWidth={dimensions.width}
               compositionHeight={dimensions.height}
@@ -451,6 +457,80 @@ export default function SceneManager() {
               />
             </label>
           )}
+          <div className="asset-section">
+            <span className="field-label">
+              <Image size={13} />
+              素材背景
+            </span>
+            <div className="path-row">
+              <input
+                className="input"
+                value={assetQuery || selectedScene.background?.query || ''}
+                onChange={(event) => setAssetQuery(event.target.value)}
+                placeholder="Pexels 关键词"
+              />
+              <button
+                className="btn btn-ghost btn-icon"
+                title="搜索素材"
+                onClick={async () => {
+                  const query = (assetQuery || selectedScene.background?.query || selectedScene.title).trim();
+                  setAssetStatus('搜索中...');
+                  try {
+                    const orientation = aspect === '9:16' ? 'portrait' : aspect === '1:1' ? 'square' : 'landscape';
+                    const result = await fetchAssets({
+                      query,
+                      count: 6,
+                      orientation,
+                      apiKey: settings.pexelsApiKey,
+                    });
+                    setAssetQuery(result.query);
+                    setAssetCandidates(result.candidates);
+                    setAssetStatus(result.candidates.length ? `${result.candidates.length} 个候选` : '没有找到候选素材');
+                  } catch (error) {
+                    setAssetStatus(String(error));
+                  }
+                }}
+              >
+                <Search size={15} />
+              </button>
+            </div>
+            <div className="asset-actions">
+              <button
+                className="btn btn-soft btn-sm"
+                onClick={() => updateScene(selectedScene.id, { background: { kind: 'none' } })}
+              >
+                清除背景
+              </button>
+              <span className="tag-dim">{assetStatus}</span>
+            </div>
+            {assetCandidates.length > 0 && (
+              <div className="asset-grid">
+                {assetCandidates.map((asset) => {
+                  const active = selectedScene.background?.assetPath === asset.localPath;
+                  return (
+                    <button
+                      key={asset.localPath}
+                      className={active ? 'asset-tile active' : 'asset-tile'}
+                      onClick={() =>
+                        updateScene(selectedScene.id, {
+                          background: {
+                            kind: asset.type,
+                            assetPath: asset.localPath,
+                            query: assetQuery,
+                            fit: 'cover',
+                            kenBurns: asset.type === 'image',
+                          },
+                        })
+                      }
+                    >
+                      {asset.thumb ? <img src={asset.thumb} alt="" /> : <span>{asset.type}</span>}
+                      <em>{asset.type === 'video' ? '视频' : '图片'}</em>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
           <div className="voice-state">
             {selectedScene.audio ? (
               <span className="pill pill-accent">{selectedScene.audio.duration.toFixed(1)}s</span>
@@ -461,8 +541,12 @@ export default function SceneManager() {
               className="btn btn-soft btn-sm"
               onClick={async () => {
                 const output = `${selectedScene.id}.mp3`;
-                const duration = await generateTts({ text: selectedScene.narration, voice, output, engine });
-                updateScene(selectedScene.id, { audio: { path: output, duration } });
+                const result = await generateTts({ text: selectedScene.narration, voice, output, engine });
+                updateScene(selectedScene.id, {
+                  duration: Math.max(2, Math.ceil(result.duration)),
+                  audio: { path: result.output, duration: result.duration, wordsPath: result.wordsPath },
+                  captions: result.words ?? [],
+                });
               }}
             >
               <Volume2 size={14} />

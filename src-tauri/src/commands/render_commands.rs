@@ -45,10 +45,12 @@ pub async fn render_video(
     aspect: String,
     resolution: String,
     format: String,
+    captions_json: Option<String>,
 ) -> Result<String, String> {
     let project_dir = project_dir(&app)?;
     let script_path = project_dir.join("scripts").join("render.mjs");
-    let mut child = Command::new("node")
+    let mut child_command = Command::new("node");
+    child_command
         .current_dir(&project_dir)
         .arg(script_path)
         .arg("--scenes")
@@ -60,7 +62,11 @@ pub async fn render_video(
         .arg("--resolution")
         .arg(&resolution)
         .arg("--format")
-        .arg(&format)
+        .arg(&format);
+    if let Some(captions_json) = captions_json {
+        child_command.arg("--captions").arg(captions_json);
+    }
+    let mut child = child_command
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
         .spawn()

@@ -1,12 +1,13 @@
 import { Composition } from 'remotion';
 import { ASPECT_DIMENSIONS, type Aspect } from '../../src/constants/aspect';
-import type { VideoScene } from '../../src/types';
+import type { CaptionSettings, VideoScene } from '../../src/types';
 import { VideoComposition } from './VideoComposition';
 import { sampleScenes } from './sampleScenes';
 
 type CompositionProps = {
   scenes?: VideoScene[];
   aspect?: Aspect;
+  captions?: CaptionSettings;
 };
 
 export function Root() {

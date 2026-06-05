@@ -12,6 +12,7 @@ const enUS: typeof zhCN = {
     scenes: 'Scenes',
     preview: 'Preview',
     export: 'Export',
+    settings: 'Settings',
   },
   scriptEditor: {
     title: 'Script Editor',

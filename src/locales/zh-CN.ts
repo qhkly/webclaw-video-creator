@@ -10,6 +10,7 @@ const zhCN = {
     scenes: '场景',
     preview: '预览',
     export: '导出',
+    settings: '设置',
   },
   scriptEditor: {
     title: '脚本编辑器',

@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import type { Aspect } from '../constants/aspect';
-import type { SceneTemplate, VideoScene, VoiceEngine } from '../types';
+import type { CaptionSettings, CreatorSettings, SceneTemplate, VideoScene, VoiceEngine } from '../types';
 
 const templates: SceneTemplate[] = ['TitleSlide', 'BulletPoints', 'BigStat', 'Quote'];
 
@@ -49,14 +49,18 @@ const defaultScenes: VideoScene[] = [
 
 interface VideoStore {
   scenes: VideoScene[];
-  activePage: 'script' | 'scenes' | 'preview' | 'export';
+  activePage: 'script' | 'scenes' | 'preview' | 'export' | 'settings';
   aspect: Aspect;
   voice: string;
   engine: VoiceEngine;
+  settings: CreatorSettings;
+  captions: CaptionSettings;
   setActivePage: (page: VideoStore['activePage']) => void;
   setAspect: (aspect: Aspect) => void;
   setVoice: (voice: string) => void;
   setEngine: (engine: VoiceEngine) => void;
+  setSettings: (settings: CreatorSettings) => void;
+  updateCaptionSettings: (patch: Partial<CaptionSettings>) => void;
   setScenes: (scenes: VideoScene[]) => void;
   updateScene: (id: string, patch: Partial<VideoScene>) => void;
   moveScene: (id: string, direction: -1 | 1) => void;
@@ -69,10 +73,55 @@ export const useVideoStore = create<VideoStore>((set) => ({
   aspect: '16:9',
   voice: 'zh-CN-YunxiNeural',
   engine: 'edge',
+  captions: {
+    enabled: true,
+    position: 'bottom',
+    fontSize: 54,
+    activeColor: '#facc15',
+    inactiveColor: '#ffffff',
+  },
+  settings: {
+    pexelsApiKey: '',
+    llm: {
+      provider: 'claude-cli',
+      baseUrl: '',
+      model: '',
+    },
+    defaults: {
+      voice: 'zh-CN-YunxiNeural',
+      aspect: '16:9',
+      resolution: '1080p',
+    },
+    captions: {
+      enabled: true,
+      position: 'bottom',
+      fontSize: 54,
+      activeColor: '#facc15',
+      inactiveColor: '#ffffff',
+    },
+  },
   setActivePage: (activePage) => set({ activePage }),
   setAspect: (aspect) => set({ aspect }),
   setVoice: (voice) => set({ voice }),
   setEngine: (engine) => set({ engine }),
+  setSettings: (settings) =>
+    set({
+      settings,
+      voice: settings.defaults.voice,
+      aspect: settings.defaults.aspect,
+      captions: settings.captions,
+    }),
+  updateCaptionSettings: (patch) =>
+    set((state) => {
+      const captions = { ...state.captions, ...patch };
+      return {
+        captions,
+        settings: {
+          ...state.settings,
+          captions,
+        },
+      };
+    }),
   setScenes: (scenes) => set({ scenes }),
   updateScene: (id, patch) =>
     set((state) => ({

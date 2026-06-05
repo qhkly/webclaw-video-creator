@@ -2,6 +2,23 @@ use std::path::{Path, PathBuf};
 use tauri::Manager;
 use tokio::process::Command;
 
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WordToken {
+    text: String,
+    start_ms: f64,
+    duration_ms: f64,
+}
+
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TtsResult {
+    output: String,
+    duration: f64,
+    words_path: Option<String>,
+    words: Option<Vec<WordToken>>,
+}
+
 #[tauri::command]
 pub async fn generate_tts(
     app: tauri::AppHandle,
@@ -9,7 +26,7 @@ pub async fn generate_tts(
     voice: String,
     output: String,
     engine: String,
-) -> Result<f64, String> {
+) -> Result<TtsResult, String> {
     let project_dir = project_dir(&app)?;
     let output_path = normalize_output_path(&project_dir, &output);
     let script_path = project_dir.join("scripts").join("tts.mjs");
@@ -32,11 +49,9 @@ pub async fn generate_tts(
         return Err(String::from_utf8_lossy(&output.stderr).to_string());
     }
 
-    let value: serde_json::Value = serde_json::from_slice(&output.stdout)
+    let value: TtsResult = serde_json::from_slice(&output.stdout)
         .map_err(|error| format!("invalid TTS JSON output: {error}"))?;
-    value["duration"]
-        .as_f64()
-        .ok_or_else(|| "TTS output did not include duration".to_string())
+    Ok(value)
 }
 
 fn normalize_output_path(project_dir: &Path, output: &str) -> PathBuf {
@@ -44,7 +59,7 @@ fn normalize_output_path(project_dir: &Path, output: &str) -> PathBuf {
     if path.is_absolute() {
         path
     } else {
-        project_dir.join(".video-work").join(path)
+        project_dir.join(".video-work").join("audio").join(path)
     }
 }
 
