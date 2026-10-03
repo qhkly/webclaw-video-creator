@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use tauri::Manager;
-use tokio::process::Command;
+use super::node_env::node_command;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -44,7 +44,7 @@ pub async fn fetch_assets(
         .unwrap_or_else(|| app_project_dir.join(".video-work"))
         .join("assets");
     let script_path = app_project_dir.join("scripts").join("fetch-assets.mjs");
-    let output = Command::new("node")
+    let output = node_command()
         .current_dir(&app_project_dir)
         .arg(script_path)
         .arg("--query")

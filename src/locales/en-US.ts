@@ -84,7 +84,7 @@ const enUS: typeof zhCN = {
     approval: 'Confirmation',
     approvalAuto: 'Run local/free video tools automatically; confirm paid generation',
     approvalAsk: 'Ask me before every generation or file write',
-    safetyNote: 'The agent can only use video tools (no shell, no code edits). Reasoning runs on your signed-in Claude Code / Codex plan; paid generation is always confirmed separately.',
+    safetyNote: 'Claude Code can only use the video tools (no shell, no code edits); Codex runs in a read-only sandbox and can only write files through the video tools. Reasoning runs on your signed-in Claude Code / Codex plan; paid generation is always confirmed separately. The video tools need Node.js and the project dependencies (npm ci) on this machine.',
     detecting: 'Detecting agents…',
     noCli: 'No agent found',
     installHint: 'Claude Code or Codex was not found. Install one and sign in from a terminal (claude / codex), then reopen this page.',

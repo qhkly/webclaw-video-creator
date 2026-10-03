@@ -22,6 +22,8 @@ use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
 use tokio::sync::oneshot;
 
+use super::node_env::{effective_path, which};
+
 const SERVER_NAME: &str = "video-creator";
 /// Client-side MCP tool timeout. Must exceed the server's approval wait (15 min,
 /// mcp/approval.mjs) and long renders; Codex otherwise gives up after 300s.
@@ -316,7 +318,12 @@ pub async fn agent_decide_approval(
         return Err("该确认请求已失效".to_string());
     }
     let decision = json!({ "allow": allow, "note": note.unwrap_or_default() });
-    tokio::fs::write(dir.join(format!("{approval_id}.decision.json")), decision.to_string())
+    // Write then rename so the MCP server never reads a half-written decision.
+    let staging = dir.join(format!("{approval_id}.decision.tmp"));
+    tokio::fs::write(&staging, decision.to_string())
+        .await
+        .map_err(|error| format!("failed to write decision: {error}"))?;
+    tokio::fs::rename(&staging, dir.join(format!("{approval_id}.decision.json")))
         .await
         .map_err(|error| format!("failed to write decision: {error}"))
 }
@@ -416,78 +423,9 @@ async fn cli_version(path: &Path) -> Option<String> {
         return None;
     }
     let text = String::from_utf8_lossy(&output.stdout).trim().to_string();
-    Some(text.lines().next().unwrap_or_default().to_string())
-}
-
-fn which(binary: &str) -> Option<PathBuf> {
-    let names: Vec<String> = if cfg!(windows) {
-        vec![format!("{binary}.cmd"), format!("{binary}.exe"), binary.to_string()]
-    } else {
-        vec![binary.to_string()]
-    };
-    std::env::split_paths(&effective_path())
-        .flat_map(|dir| names.iter().map(move |name| dir.join(name)))
-        .find(|candidate| candidate.is_file())
-}
-
-/// Login-shell PATH, then well-known install dirs, then the inherited PATH.
-fn effective_path() -> String {
-    static CACHE: OnceLock<String> = OnceLock::new();
-    CACHE
-        .get_or_init(|| {
-            let mut dirs: Vec<PathBuf> = Vec::new();
-            if let Some(login) = login_shell_path() {
-                dirs.extend(std::env::split_paths(&login));
-            }
-            if let Some(home) = std::env::var_os("HOME").map(PathBuf::from) {
-                dirs.push(home.join(".ai-studio").join("npm-global").join("bin"));
-                dirs.push(home.join(".local").join("bin"));
-                dirs.push(home.join(".npm-global").join("bin"));
-                dirs.push(home.join(".volta").join("bin"));
-                if let Ok(entries) = std::fs::read_dir(home.join(".nvm").join("versions").join("node")) {
-                    let mut versions: Vec<PathBuf> = entries.flatten().map(|entry| entry.path().join("bin")).collect();
-                    versions.sort_by_key(|path| std::cmp::Reverse(version_key(path)));
-                    dirs.extend(versions);
-                }
-            }
-            dirs.push(PathBuf::from("/opt/homebrew/bin"));
-            dirs.push(PathBuf::from("/usr/local/bin"));
-            if let Some(current) = std::env::var_os("PATH") {
-                dirs.extend(std::env::split_paths(&current));
-            }
-            let mut seen = std::collections::HashSet::new();
-            dirs.retain(|dir| seen.insert(dir.clone()));
-            std::env::join_paths(dirs)
-                .map(|joined| joined.to_string_lossy().to_string())
-                .unwrap_or_default()
-        })
-        .clone()
-}
-
-fn version_key(bin_dir: &Path) -> (u64, u64, u64) {
-    let name = bin_dir
-        .parent()
-        .and_then(|dir| dir.file_name())
-        .and_then(|name| name.to_str())
-        .unwrap_or_default()
-        .trim_start_matches('v')
-        .to_string();
-    let mut parts = name.split('.').map(|part| part.parse::<u64>().unwrap_or(0));
-    (parts.next().unwrap_or(0), parts.next().unwrap_or(0), parts.next().unwrap_or(0))
-}
-
-fn login_shell_path() -> Option<String> {
-    if cfg!(windows) {
-        return None;
-    }
-    let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".to_string());
-    let output = std::process::Command::new(shell)
-        .args(["-lc", "printf %s \"$PATH\""])
-        .stdin(Stdio::null())
-        .output()
-        .ok()?;
-    let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
-    (output.status.success() && !path.is_empty()).then_some(path)
+    // `claude --version` prints "2.1.0 (Claude Code)"; the label is shown separately, so drop the suffix.
+    let first = text.lines().next().unwrap_or_default();
+    Some(first.split(" (").next().unwrap_or(first).trim().to_string())
 }
 
 fn project_dir(app: &AppHandle) -> Result<PathBuf, String> {

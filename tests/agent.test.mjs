@@ -67,6 +67,24 @@ test('a declined tool returns an actionable error and does not run', async () =>
   assert.deepEqual(status.structuredContent.projects, [], 'nothing was written');
 });
 
+test('a half-written decision file is retried, not treated as a failure', async () => {
+  const { dir, call } = await gatedServer('ask');
+  const pending = call('video_scenes_save', { project: 'p', scenes: [SCENE] });
+  let requests = [];
+  while (requests.length === 0) {
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    requests = (await readdir(dir).catch(() => [])).filter((name) => name.endsWith('.request.json'));
+  }
+  const decisionPath = join(dir, requests[0].replace('.request.json', '.decision.json'));
+  // The server polls while the host is still writing: a truncated file must not count as a decision.
+  await writeFile(decisionPath, '{"allo');
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  await writeFile(decisionPath, JSON.stringify({ allow: true }));
+  const result = await pending;
+  assert.equal(result.isError, undefined, result.content[0].text);
+  assert.deepEqual(await readdir(dir), []);
+});
+
 test('auto mode runs local tools without asking; read-only tools never ask', async () => {
   const { dir, call } = await gatedServer('auto');
   const saved = await call('video_scenes_save', { project: 'p', scenes: [SCENE] });

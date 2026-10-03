@@ -51,8 +51,8 @@ export async function requestApproval(approval, tool, args) {
   const deadline = Date.now() + approval.timeoutMs;
   try {
     while (Date.now() < deadline) {
-      if (await exists(decisionPath)) {
-        const decision = JSON.parse(await readFile(decisionPath, 'utf8'));
+      const decision = await readDecision(decisionPath);
+      if (decision) {
         if (decision.allow === true) {
           return;
         }
@@ -64,5 +64,17 @@ export async function requestApproval(approval, tool, args) {
   } finally {
     await rm(requestPath, { force: true });
     await rm(decisionPath, { force: true });
+  }
+}
+
+/** The decision file, or null while it is missing or still being written (retried on the next poll). */
+async function readDecision(path) {
+  if (!(await exists(path))) {
+    return null;
+  }
+  try {
+    return JSON.parse(await readFile(path, 'utf8'));
+  } catch {
+    return null;
   }
 }

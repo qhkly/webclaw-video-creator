@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use tauri::{AppHandle, Emitter, Manager, Runtime};
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, BufReader};
-use tokio::process::Command;
+use super::node_env::node_command;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct CutterProgress {
@@ -179,7 +179,7 @@ async fn run_sidecar<R: Runtime>(
     envs: Vec<(&str, String)>,
 ) -> Result<serde_json::Value, String> {
     let project_dir = project_dir(app)?;
-    let mut child = Command::new("node")
+    let mut child = node_command()
         .current_dir(&project_dir)
         .arg(project_dir.join("scripts").join(script))
         .args(args)

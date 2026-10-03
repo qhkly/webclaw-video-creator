@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use tauri::{AppHandle, Emitter, Manager};
 use tokio::io::{AsyncBufReadExt, BufReader};
-use tokio::process::Command;
+use super::node_env::node_command;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct RenderProgress {
@@ -49,7 +49,7 @@ pub async fn render_video(
 ) -> Result<String, String> {
     let project_dir = project_dir(&app)?;
     let script_path = project_dir.join("scripts").join("render.mjs");
-    let mut child_command = Command::new("node");
+    let mut child_command = node_command();
     child_command
         .current_dir(&project_dir)
         .arg(script_path)

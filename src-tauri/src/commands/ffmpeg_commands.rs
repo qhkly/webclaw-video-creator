@@ -3,6 +3,8 @@ use std::path::PathBuf;
 use tauri::Manager;
 use tokio::process::Command;
 
+use super::node_env::node_command;
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct AudioSegment {
     path: String,
@@ -54,7 +56,7 @@ pub async fn combine_audio_video(
 }
 
 async fn find_ffmpeg(project_dir: PathBuf) -> Result<PathBuf, String> {
-    let output = Command::new("node")
+    let output = node_command()
         .current_dir(project_dir)
         .arg("-e")
         .arg("console.log(require('ffmpeg-static'))")

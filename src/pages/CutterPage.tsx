@@ -252,7 +252,11 @@ export default function CutterPage() {
       setTranscript(result);
       setProgress({ task: 'transcribe', percent: 100, message: `转写完成 · ${result.segments.length} 段` });
     } catch (caught) {
-      setError(String(caught));
+      const fallbackHint =
+        asr.provider === 'openai' || asr.provider === 'whisper-cpp'
+          ? '（可在「设置 → 语音识别」切换为「自动」，识别失败时会降级为按停顿切分）'
+          : '';
+      setError(`${String(caught)}${fallbackHint}`);
       setProgress(null);
     } finally {
       setBusy(null);

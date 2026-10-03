@@ -83,30 +83,8 @@ export async function exists(path) {
   }
 }
 
-/** FFMPEG_PATH env, then ffmpeg-static, then `ffmpeg` on PATH — same order as the Cutter MVP helper. */
-export async function findFfmpeg() {
-  const candidates = [];
-  if (process.env.FFMPEG_PATH) {
-    candidates.push(process.env.FFMPEG_PATH);
-  }
-  try {
-    const bundled = (await import('ffmpeg-static')).default;
-    if (bundled) {
-      candidates.push(bundled);
-    }
-  } catch {
-    // ffmpeg-static not installed; fall through to PATH.
-  }
-  for (const candidate of candidates) {
-    try {
-      await access(candidate, constants.X_OK);
-      return candidate;
-    } catch {
-      // try next
-    }
-  }
-  return 'ffmpeg';
-}
+/** FFMPEG_PATH env, then ffmpeg-static, then `ffmpeg` on PATH — the Cutter's resolver, shared. */
+export { findFfmpeg } from '../scripts/lib/media.mjs';
 
 /** Run a process without inheriting stdio (stdout belongs to the MCP transport). */
 export function run(command, args, { cwd, onStdoutLine, signal } = {}) {

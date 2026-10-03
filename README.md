@@ -14,7 +14,9 @@ The app is built as an independent project in this workspace and does not share 
 
 ## Text-Based Cutter (文字剪辑)
 
-Lightweight AI editor for talking-head / product-demo videos: edit the transcript, and the video follows. It is the first page in the app.
+Lightweight AI editor for talking-head / product-demo videos: edit the transcript, and the video follows. It is the first workflow step after the AI Director page (`00 文字剪辑`) and has its own preview and export; the title-bar Preview/Export shortcuts belong to the scene workflow and are hidden on this page.
+
+The transcript and cut decisions are kept in memory while the app runs (switching pages is safe) but are not saved across restarts yet; export before quitting.
 
 1. **Import** a local video (mp4 / mov / m4v / mkv / webm / avi). The source file is never modified.
 2. **Transcribe** through `scripts/transcribe.mjs`, which wraps swappable providers configured in Settings → 语音识别:
@@ -51,6 +53,12 @@ Install dependencies:
 ```bash
 npm ci
 ```
+
+Runtime requirement: TTS, render, the Cutter and the AI Director's MCP tools all run Node sidecars from this project
+directory (`scripts/*.mjs`, `mcp/server.mjs`) and need `node` (18+) plus the installed `node_modules` (`ffmpeg-static`,
+Remotion, Edge TTS). `node` is resolved from the login-shell PATH (nvm / Homebrew / Volta), so this also works when the
+app is started from Finder. A packaged build still resolves the project directory at compile time, so it is not yet a
+self-contained installer.
 
 Start the Tauri app:
 

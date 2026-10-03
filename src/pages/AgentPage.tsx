@@ -246,7 +246,8 @@ function ApprovalCard({ request, runId }: { request: ApprovalRequest; runId: str
       return;
     }
     setBusy(true);
-    await decideApproval(runId, request.id, allow).catch(() => {});
+    // On success the request disappears with the next poll; on failure (e.g. already expired) let the user retry.
+    await decideApproval(runId, request.id, allow).catch(() => setBusy(false));
   };
   return (
     <div className="agent-approval">

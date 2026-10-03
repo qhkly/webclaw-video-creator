@@ -16,6 +16,11 @@ const NAV_KEYS = ['agent', 'cutter', 'script', 'scenes', 'preview', 'export', 's
 const NAV_ICONS = { agent: Sparkles, cutter: Scissors, script: PenLine, scenes: ListVideo, preview: LayoutDashboard, export: Film, settings: Settings };
 const NAV_STEPS = { agent: 'AI', cutter: '00', script: '01', scenes: '02', preview: '03', export: '04', settings: '05' };
 
+// The title-bar project badges and Preview/Export shortcuts belong to the scene workflow (script → scenes → preview →
+// export). The AI Director and the Cutter have their own result/export flows, so the shortcuts are hidden there to
+// avoid sending the user to the scene exporter with unrelated (demo) scenes.
+const SCENE_WORKFLOW_PAGES = new Set<string>(['script', 'scenes', 'preview', 'export']);
+
 const LOCALES: Locale[] = ['zh-CN', 'en-US'];
 const LOCALE_LABELS: Record<Locale, string> = { 'zh-CN': '中文', 'en-US': 'EN' };
 
@@ -28,6 +33,7 @@ export default function App() {
   const { t, locale, setLocale } = useI18n();
   const totalSeconds = scenes.reduce((total, scene) => total + scene.duration, 0);
   const voicedCount = scenes.filter((scene) => scene.audio).length;
+  const inSceneWorkflow = SCENE_WORKFLOW_PAGES.has(activePage);
 
   useEffect(() => {
     void getSettings()
@@ -40,20 +46,24 @@ export default function App() {
       <header className="titlebar">
         <div className="tb-project">
           <span className="dot" />
-          <span>{t.app.projectName}</span>
-          <span className="badge">{aspect}</span>
-          <span className="badge">{totalSeconds}s</span>
+          <span>{inSceneWorkflow ? t.app.projectName : t.nav[activePage]}</span>
+          {inSceneWorkflow && <span className="badge">{aspect}</span>}
+          {inSceneWorkflow && <span className="badge">{totalSeconds}s</span>}
         </div>
         <div className="tb-right">
           <ThemePanel />
-          <button className="btn btn-ghost btn-sm" onClick={() => setActivePage('preview')}>
-            <Play size={14} />
-            {t.nav.preview}
-          </button>
-          <button className="btn btn-primary btn-sm" onClick={() => setActivePage('export')}>
-            <Download size={14} />
-            {t.nav.export}
-          </button>
+          {inSceneWorkflow && activePage !== 'preview' && (
+            <button className="btn btn-ghost btn-sm" onClick={() => setActivePage('preview')}>
+              <Play size={14} />
+              {t.nav.preview}
+            </button>
+          )}
+          {inSceneWorkflow && activePage !== 'export' && (
+            <button className="btn btn-primary btn-sm" onClick={() => setActivePage('export')}>
+              <Download size={14} />
+              {t.nav.export}
+            </button>
+          )}
         </div>
       </header>
 

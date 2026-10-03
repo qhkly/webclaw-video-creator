@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 use tauri::Manager;
-use tokio::process::Command;
+use super::node_env::node_command;
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -30,7 +30,7 @@ pub async fn generate_tts(
     let project_dir = project_dir(&app)?;
     let output_path = normalize_output_path(&project_dir, &output);
     let script_path = project_dir.join("scripts").join("tts.mjs");
-    let output = Command::new("node")
+    let output = node_command()
         .current_dir(&project_dir)
         .arg(script_path)
         .arg("--text")

@@ -2126,3 +2126,10 @@ input[type="range"] {
     max-height: none;
   }
 }
+
+.settings-hint {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--muted);
+}

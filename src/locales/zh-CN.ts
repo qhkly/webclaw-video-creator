@@ -82,7 +82,7 @@ const zhCN = {
     approval: '确认策略',
     approvalAuto: '自动执行本地/免费视频工具，付费生成需确认',
     approvalAsk: '每次生成或写入文件都需要我确认',
-    safetyNote: 'Agent 只能使用视频工具（不能执行命令或修改代码）。推理用你已登录的 Claude Code / Codex 套餐；付费生成服务始终单独确认。',
+    safetyNote: 'Claude Code 只能使用视频工具（无命令行、不能改代码）；Codex 在只读沙箱中运行，文件只能通过视频工具写入工作区。推理用你已登录的 Claude Code / Codex 套餐；付费生成服务始终单独确认。视频工具依赖本机 Node.js 与项目依赖（npm ci）。',
     detecting: '正在检测 Agent…',
     noCli: '未检测到 Agent',
     installHint: '未检测到 Claude Code 或 Codex。请先安装并在终端完成登录（claude / codex），然后重新打开本页。',

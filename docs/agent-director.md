@@ -151,5 +151,6 @@ Video Creator 的代码里从来没有 AI Studio UI，问题出在**启动链路
 
 - MCP 代码全部在新目录（`mcp/`、`tests/mcp.test.mjs`、`scripts/lib/stage-media.mjs`），不改动任何页面。
 - `package.json` 的 `test` 脚本与 Cutter 分支完全一致，试合并无冲突。
-- `mcp/context.mjs` 的 `findFfmpeg` 与 Cutter `scripts/lib/media.mjs` 使用相同的解析顺序；合并后应改为直接 import Cutter 的实现，去掉重复代码。
+- 已合并：`mcp/context.mjs` 直接复用 Cutter `scripts/lib/media.mjs` 的 `findFfmpeg`；所有 Rust 命令（Cutter、TTS、渲染、Agent）通过 `commands/node_env.rs` 用同一套登录 Shell PATH 解析 `node`。
+- 已合并：顶栏「预览 / 导出」只属于场景流程（脚本 → 场景 → 预览 → 导出），在 AI 导演与文字剪辑页隐藏；这两页各有自己的结果预览与导出。
 - 顺带修复了一个现有 bug：带 TTS 音频的场景导出时，Remotion 拒绝 `file://` 路径。`render.mjs` 现在先把本地媒体放进 publicDir，再改写为 `static:` 路径；`mediaSrc()` 遇到 `static:` 时走 `staticFile()`。应用内 Player 不受影响。

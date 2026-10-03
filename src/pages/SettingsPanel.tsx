@@ -102,6 +102,9 @@ export default function SettingsPanel() {
             <span className="field-label">whisper-cli 路径（可选）</span>
             <input className="input" value={draft.asr.whisperBin} onChange={(event) => updateAsr({ whisperBin: event.target.value })} placeholder="whisper-cli" />
           </label>
+          <p className="settings-hint">
+            OpenAI 兼容接口与 whisper.cpp 目前仅通过模拟服务验证，接口需支持 verbose_json 词级时间戳。选「自动」时识别失败会降级为按停顿切分并在文字剪辑页提示；指定引擎失败则直接报错。
+          </p>
         </div>
 
         <div className="card settings-card">
