@@ -94,6 +94,8 @@ export const tools = [
   },
   {
     name: 'video_scenes_save',
+    // Approval class (see mcp/approval.mjs): local | free-network | paid.
+    cost: 'local',
     title: 'Validate and save scenes',
     description:
       'Validate a scenes array (same shape the editor and Remotion renderer use) and write it to <workspace>/projects/<project>/scenes.json. ' +
@@ -124,6 +126,7 @@ export const tools = [
   },
   {
     name: 'video_tts_synthesize',
+    cost: 'free-network',
     title: 'Synthesize narration (TTS)',
     description:
       'Generate narration audio with a TTS provider (default: the brand profile voice) via scripts/tts.mjs, producing an mp3 plus word-level timings for captions. ' +
@@ -198,6 +201,7 @@ export const tools = [
   },
   {
     name: 'video_render',
+    cost: 'local',
     title: 'Render scenes to video',
     description:
       'Render the project\'s scenes.json with the Remotion templates (scripts/render.mjs), including scene audio and word captions. ' +
@@ -259,6 +263,7 @@ export const tools = [
   },
   {
     name: 'video_audio_mux',
+    cost: 'local',
     title: 'Mux audio onto video',
     description:
       'Lay one or more audio files onto a video at given start times with FFmpeg (video stream copied, output keeps the video length). ' +

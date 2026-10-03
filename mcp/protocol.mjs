@@ -1,6 +1,7 @@
 // Minimal MCP (JSON-RPC 2.0) server core: initialize / ping / tools/list / tools/call.
 // Transport-agnostic so it can be unit-tested in-process and later mounted on
 // HTTP (as webcode-ai-studio does) without touching tool code.
+import { needsApproval, requestApproval } from './approval.mjs';
 import { ToolError } from './context.mjs';
 
 export const SUPPORTED_PROTOCOL_VERSIONS = ['2025-06-18', '2025-03-26', '2024-11-05'];
@@ -16,7 +17,7 @@ export const SERVER_INSTRUCTIONS = [
   'Relative paths resolve inside the workspace; outputs are always written inside the workspace.',
 ].join(' ');
 
-export function createMcpServer({ tools, ctx, log = () => {} }) {
+export function createMcpServer({ tools, ctx, approval = null, log = () => {} }) {
   const byName = new Map(tools.map((tool) => [tool.name, tool]));
 
   async function handle(message, notify = () => {}) {
@@ -83,6 +84,9 @@ export function createMcpServer({ tools, ctx, log = () => {} }) {
     };
     try {
       validateArgs(tool.inputSchema, args);
+      if (approval && needsApproval(tool, approval.mode)) {
+        await requestApproval(approval, tool, args);
+      }
       const value = await tool.handler(args, { ctx, progress, log });
       return {
         content: [{ type: 'text', text: JSON.stringify(value, null, 2) }],

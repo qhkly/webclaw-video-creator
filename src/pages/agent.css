@@ -1,0 +1,279 @@
+/* ── AI Director (Agent page) ─────────────────────────────── */
+.agent-composer {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  margin-bottom: 18px;
+}
+
+.agent-task {
+  min-height: 92px;
+  resize: vertical;
+}
+
+.agent-suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.agent-suggestions .chip {
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+.agent-suggestions .chip:hover {
+  border-color: var(--accent);
+  color: var(--accent-deep);
+}
+
+.agent-composer-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.agent-composer-bar .spacer {
+  flex: 1;
+}
+
+.agent-project {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.agent-project > span {
+  margin: 0;
+}
+
+.agent-project .input {
+  width: 180px;
+  height: 32px;
+}
+
+.agent-advanced {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.agent-hint {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+.agent-alert {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: var(--r-md);
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
+  color: var(--danger);
+  font-size: 13px;
+  white-space: pre-wrap;
+}
+
+.agent-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(320px, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.agent-timeline,
+.agent-results {
+  padding: 14px 16px 16px;
+}
+
+.agent-timeline .card-toolbar,
+.agent-results .card-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.agent-empty {
+  padding: 28px 8px;
+  color: var(--faint);
+  font-size: 13px;
+  text-align: center;
+}
+
+.agent-events {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ev {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.ev code {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.ev-text {
+  padding: 10px 12px;
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+  white-space: pre-wrap;
+}
+
+.ev-tool {
+  color: var(--accent-deep);
+}
+
+.ev-ok {
+  color: #15803d;
+}
+
+.ev-fail {
+  color: var(--danger);
+}
+
+.ev-muted {
+  color: var(--faint);
+}
+
+.ev-done {
+  padding: 10px 12px;
+  border-radius: var(--r-md);
+  background: var(--accent-tint);
+  color: var(--accent-deep);
+}
+
+.ev-done p,
+.ev-fail p {
+  margin: 4px 0;
+  color: var(--text);
+  white-space: pre-wrap;
+}
+
+.ev-done em,
+.ev-fail em {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  font-style: normal;
+}
+
+.agent-approval {
+  margin-bottom: 12px;
+  padding: 12px;
+  border: 1px solid var(--accent);
+  border-radius: var(--r-md);
+  background: var(--accent-tint);
+}
+
+.agent-approval-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--accent-deep);
+}
+
+.agent-approval pre {
+  max-height: 160px;
+  overflow: auto;
+  margin: 10px 0;
+  padding: 8px;
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  font-size: 11.5px;
+}
+
+.agent-approval-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.pill-warn {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.agent-video {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border-radius: var(--r-md);
+  background: var(--stage);
+}
+
+.agent-video-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--faint);
+  font-size: 13px;
+}
+
+.agent-result-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.agent-result-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.agent-result-row span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-result-row em {
+  color: var(--faint);
+  font-size: 12px;
+  font-style: normal;
+}
+
+.spin {
+  animation: agent-spin 1s linear infinite;
+}
+
+@keyframes agent-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 1180px) {
+  .agent-grid,
+  .agent-advanced {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

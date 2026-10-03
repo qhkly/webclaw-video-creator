@@ -95,6 +95,58 @@ Agent 能看到的描述包括：`initialize.instructions`（导演工作方式�
   ```
 - 手动调试：`npm run mcp`（stdin/stdout 使用换行分隔的 JSON-RPC，日志输出到 stderr）。
 
+## 前台：Video Creator 自己的 Agent 入口（视频产品化裁剪）
+
+### 为什么启动后出现完整 AI Studio 首页（已修复）
+
+Video Creator 的代码里从来没有 AI Studio UI，问题出在**启动链路的环境变量泄漏**：
+
+1. WebCode AI Studio 本身以 `tauri dev` 运行，Tauri CLI 会给 App 进程注入 `TAURI_CONFIG={"build":{"devUrl":"http://127.0.0.1:1430"}}`（另外还有 `CARGO_PKG_NAME=webcode-ai-studio`、`TAURI_ENV_*` 等）；
+2. AI Studio 拉起的每个 Claude Code / Codex 会话和终端都会继承这份环境；
+3. 在这样的会话里执行 Video Creator 的 `npm run tauri:dev`，Tauri CLI 会把继承来的 `TAURI_CONFIG` 合并进本项目配置，devUrl 被改成 1430；
+4. 结果是窗口标题写着「WebClaw Video Creator」，加载的却是 AI Studio 的前端（工程管理首页）。
+
+已复现并修复：
+
+- `npm run tauri*` 改走 `scripts/tauri.mjs`，先用 `scripts/lib/tauri-env.mjs` 清掉泄漏的 `TAURI_CONFIG` / `TAURI_ENV_*` / `CARGO_PKG_*` 等，再调用 Tauri CLI。`TAURI_SIGNING_*` 等发布签名变量保留，CI 的 `npm run tauri:build -- --target …` 参数原样透传；
+- dev 端口从 Tauri 模板默认的 1420（与 dockyard、opentypeless 等本机项目共用）改为 1471，避免 debug 窗口误连其他项目的 dev server；
+- `agent_start` 启动 CLI 时同样移除 `TAURI_CONFIG`。
+
+验证：在仍带有泄漏变量的会话里重新启动，窗口首屏就是「AI 导演」，WebKit 只连接 1471。
+
+建议在 AI Studio 一侧也修正：拉起会话时不要把自己的 `TAURI_CONFIG` / `CARGO_*` 传给子进程。
+
+### 保留什么，不保留什么
+
+| 保留（视频用户需要的） | 实现 |
+|---|---|
+| 简洁的 Agent 任务入口（首屏） | `src/pages/AgentPage.tsx`：一个输入框、示例任务、项目名、开始/停止 |
+| Claude Code / Codex 的选择与运行状态 | 默认自动选择，展示版本与状态；CLI、模型、确认策略收在「高级」里 |
+| 任务进度、工具调用、需要确认的操作 | 时间线：Agent 文本、每次视频工具调用及结果；确认卡片（允许/拒绝）置顶 |
+| 中间结果与成片预览 | 结果面板：最新渲染视频（asset 协议，范围仅 `.video-work`）、渲染列表、场景数 |
+| 脚本、场景、预览、导出（以及合并后的 Cutter）工作区 | 原有页面不变；「在场景编辑器中打开」把 Agent 产出的分镜接入现有编辑器 |
+| 必要的登录与设置 | 现有设置页；未安装或未登录 CLI 时给出安装和登录提示（登录在 CLI 内完成） |
+
+| 不保留（面向程序员的 Studio UI） | 原因 |
+|---|---|
+| 添加代码文件夹、新建代码工程、工程扫描与导航 | 视频用户只需要「视频项目」，使用 `.video-work/projects/<id>` |
+| Git / worktree 管理 | Agent 不写代码；workspace 只存视频产物 |
+| 通用多 CLI 管理器、会话列表、终端 | 只保留一次一个任务的 Agent 运行；CLI 选择收进「高级」 |
+| AI 管理器、编排器、专家台等 | 与视频创作无关 |
+
+### 复用 AI Studio 的什么（能力，而不是界面）
+
+- **找到 CLI**：AI Studio `login_shell_path` 的做法——从 Dock 启动的 GUI 进程拿不到 nvm/Homebrew 的 PATH，需要从用户登录 shell 取回真实 PATH，并扫描常见安装目录（`agent_commands.rs::effective_path`）；
+- **CLI 会话与状态回传**：headless 运行用户自己的 CLI（`claude -p --output-format stream-json` / `codex exec --json`），事件归一化放在 `src/lib/agent-events.ts`。前台不感知具体是哪个 CLI，新增 CLI 只需加一个 parser，没有写死 DSH 或任何单一 Runtime；
+- **MCP 能力暴露**：同一个 `mcp/server.mjs`，每次运行生成 MCP 配置并注入环境变量；
+- **审批**：确认闸门放在视频 MCP server 自己里面（`mcp/approval.mjs`，基于文件的请求/决定通道），因此对 Claude Code 和 Codex 行为一致：只读工具从不询问；付费生成总是询问；本地和免费联网工具按策略决定。前台每 0.7 秒轮询并显示确认卡片。
+
+### 安全边界
+
+- Claude Code 以 `--restricted --tools "" --strict-mcp-config` 运行：没有任何内置工具（不能执行 Bash、不能编辑文件），也不读取用户和项目的 settings，只能用 video-creator 的 8 个工具（已实测 `init.tools` 只有这 8 个）；
+- Codex 以 `--sandbox read-only` 运行；
+- 客户端 MCP 工具超时统一设为 1 小时（Codex 默认 300 秒，等待确认或长时间渲染会超时，已实测）。服务端确认等待 15 分钟后按拒绝处理。
+
 ## 与 Cutter MVP 的兼容
 
 - MCP 代码全部在新目录（`mcp/`、`tests/mcp.test.mjs`、`scripts/lib/stage-media.mjs`），不改动任何页面。

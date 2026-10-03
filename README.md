@@ -92,6 +92,11 @@ whole production itself: `video_project_status`, `video_brand_profile_get`, `vid
 npm run mcp     # stdio MCP server; workspace = $VIDEO_CREATOR_WORKSPACE or .video-work
 ```
 
+The app's first screen is the **AI Director** page: it runs the user's own Claude Code / Codex headless with only these
+video tools available (no shell, no code edits), streams progress, asks for confirmation where needed and previews results.
+`npm run tauri*` goes through `scripts/tauri.mjs`, which drops build config leaked from a parent Tauri app (e.g. when started
+from a WebCode AI Studio session) so the window never loads another app's frontend.
+
 Claude Code picks it up from `.mcp.json`. Architecture, Brand DNA format and roadmap: [docs/agent-director.md](docs/agent-director.md).
 
 ## Tests

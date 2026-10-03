@@ -7,6 +7,7 @@
 // messages only; logs go to stderr. Workspace defaults to $VIDEO_CREATOR_WORKSPACE
 // or <app>/.video-work.
 import { createInterface } from 'node:readline';
+import { approvalFromEnv } from './approval.mjs';
 import { createContext } from './context.mjs';
 import { createMcpServer } from './protocol.mjs';
 import { tools } from './tools.mjs';
@@ -14,10 +15,11 @@ import { tools } from './tools.mjs';
 const workspaceFlag = process.argv.indexOf('--workspace');
 const ctx = createContext({ workspace: workspaceFlag >= 0 ? process.argv[workspaceFlag + 1] : undefined });
 const log = (message) => process.stderr.write(`[video-creator-mcp] ${message}\n`);
-const server = createMcpServer({ tools, ctx, log });
+const approval = approvalFromEnv();
+const server = createMcpServer({ tools, ctx, approval, log });
 const send = (message) => process.stdout.write(`${JSON.stringify(message)}\n`);
 
-log(`workspace ${ctx.workspace}; ${tools.length} tools`);
+log(`workspace ${ctx.workspace}; ${tools.length} tools; approval ${approval ? `${approval.mode} via ${approval.dir}` : 'off (CLI permissions apply)'}`);
 
 const pending = new Set();
 const lines = createInterface({ input: process.stdin, crlfDelay: Infinity });

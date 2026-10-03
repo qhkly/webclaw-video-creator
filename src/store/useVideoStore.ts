@@ -59,7 +59,7 @@ const defaultScenes: VideoScene[] = [
 
 interface VideoStore {
   scenes: VideoScene[];
-  activePage: 'cutter' | 'script' | 'scenes' | 'preview' | 'export' | 'settings';
+  activePage: 'agent' | 'cutter' | 'script' | 'scenes' | 'preview' | 'export' | 'settings';
   aspect: Aspect;
   voice: string;
   engine: VoiceEngine;
@@ -79,7 +79,7 @@ interface VideoStore {
 
 export const useVideoStore = create<VideoStore>((set) => ({
   scenes: defaultScenes,
-  activePage: 'cutter',
+  activePage: 'agent',
   aspect: '16:9',
   voice: 'zh-CN-YunxiNeural',
   engine: 'edge',
