@@ -1,9 +1,9 @@
-import { Save, Settings, Subtitles } from 'lucide-react';
+import { AudioLines, Save, Settings, Subtitles } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import type { Aspect, Resolution } from '../constants/aspect';
 import { getSettings, saveSettings } from '../lib/tauri-bridge';
-import { useVideoStore } from '../store/useVideoStore';
-import type { CaptionSettings, CreatorSettings } from '../types';
+import { DEFAULT_ASR, useVideoStore } from '../store/useVideoStore';
+import type { AsrSettings, CaptionSettings, CreatorSettings } from '../types';
 
 const RESOLUTIONS: Resolution[] = ['720p', '1080p', '4K'];
 const ASPECTS: Array<{ value: Aspect; label: string }> = [
@@ -23,7 +23,7 @@ export default function SettingsPanel() {
     void getSettings()
       .then((loaded) => {
         setSettings(loaded);
-        setDraft(loaded);
+        setDraft({ ...loaded, asr: { ...DEFAULT_ASR, ...loaded.asr } });
       })
       .catch((error) => setStatus(String(error)));
   }, [setSettings]);
@@ -35,12 +35,16 @@ export default function SettingsPanel() {
     }));
   };
 
+  const updateAsr = (patch: Partial<AsrSettings>) => {
+    setDraft((current) => ({ ...current, asr: { ...current.asr, ...patch } }));
+  };
+
   return (
     <section className="page settings-page rise">
       <header className="page-head">
         <div>
           <h1>设置</h1>
-          <p>Pexels、默认导出参数和烧录字幕样式。</p>
+          <p>语音识别、Pexels、默认导出参数和烧录字幕样式。</p>
         </div>
       </header>
       <div className="settings-grid">
@@ -58,6 +62,45 @@ export default function SettingsPanel() {
               onChange={(event) => setDraft({ ...draft, pexelsApiKey: event.target.value })}
               placeholder="Pexels API Key"
             />
+          </label>
+        </div>
+
+        <div className="card settings-card">
+          <span className="field-label">
+            <AudioLines size={14} />
+            语音识别（文字剪辑）
+          </span>
+          <label>
+            <span className="field-label">引擎</span>
+            <select className="select" value={draft.asr.provider} onChange={(event) => updateAsr({ provider: event.target.value as AsrSettings['provider'] })}>
+              <option value="auto">自动（有 Key 用接口，否则本地 / 静音切分）</option>
+              <option value="openai">OpenAI 兼容接口</option>
+              <option value="whisper-cpp">本地 whisper.cpp</option>
+              <option value="silence">仅按停顿切分（无需识别）</option>
+            </select>
+          </label>
+          <label>
+            <span className="field-label">接口 Base URL</span>
+            <input className="input" value={draft.asr.baseUrl} onChange={(event) => updateAsr({ baseUrl: event.target.value })} placeholder="https://api.openai.com/v1" />
+          </label>
+          <label>
+            <span className="field-label">API Key</span>
+            <input className="input" type="password" value={draft.asr.apiKey} onChange={(event) => updateAsr({ apiKey: event.target.value })} placeholder="sk-..." />
+          </label>
+          <label>
+            <span className="field-label">模型 / 语言</span>
+            <div className="color-row">
+              <input className="input" value={draft.asr.model} onChange={(event) => updateAsr({ model: event.target.value })} placeholder="whisper-1" />
+              <input className="input" value={draft.asr.language} onChange={(event) => updateAsr({ language: event.target.value })} placeholder="zh / en（留空自动）" />
+            </div>
+          </label>
+          <label>
+            <span className="field-label">whisper.cpp 模型路径</span>
+            <input className="input" value={draft.asr.whisperModel} onChange={(event) => updateAsr({ whisperModel: event.target.value })} placeholder="/path/to/ggml-base.bin" />
+          </label>
+          <label>
+            <span className="field-label">whisper-cli 路径（可选）</span>
+            <input className="input" value={draft.asr.whisperBin} onChange={(event) => updateAsr({ whisperBin: event.target.value })} placeholder="whisper-cli" />
           </label>
         </div>
 

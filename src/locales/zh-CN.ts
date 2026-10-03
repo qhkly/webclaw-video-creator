@@ -6,6 +6,7 @@ const zhCN = {
     voiceProgressDesc: '个场景已生成配音',
   },
   nav: {
+    cutter: '文字剪辑',
     script: '脚本',
     scenes: '场景',
     preview: '预览',

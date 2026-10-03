@@ -8,6 +8,7 @@ const enUS: typeof zhCN = {
     voiceProgressDesc: 'scenes have audio',
   },
   nav: {
+    cutter: 'Text Cut',
     script: 'Script',
     scenes: 'Scenes',
     preview: 'Preview',

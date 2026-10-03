@@ -1,6 +1,7 @@
 mod commands;
 
 use commands::asset_commands::fetch_assets;
+use commands::cutter_commands::{allow_media_preview, export_cut, transcribe_video};
 use commands::ffmpeg_commands::combine_audio_video;
 use commands::render_commands::{render_video, save_scenes_json};
 use commands::settings_commands::{get_settings, save_settings};
@@ -20,6 +21,9 @@ pub fn run() {
             render_video,
             save_scenes_json,
             combine_audio_video,
+            allow_media_preview,
+            transcribe_video,
+            export_cut,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

@@ -4,6 +4,7 @@ export type SceneTemplate = 'TitleSlide' | 'BulletPoints' | 'BigStat' | 'Quote' 
 
 export type VoiceEngine = 'edge' | 'f5';
 export type { Aspect, Format, Resolution } from './constants/aspect';
+export type { CutMap, CutSource, TimeRange, Transcript, TranscriptSegment, TranscriptWord } from './lib/cut-plan';
 
 export interface AudioAsset {
   path: string;
@@ -47,6 +48,18 @@ export interface CaptionSettings {
   inactiveColor: string;
 }
 
+export type AsrProvider = 'auto' | 'openai' | 'whisper-cpp' | 'silence';
+
+export interface AsrSettings {
+  provider: AsrProvider;
+  baseUrl: string;
+  apiKey: string;
+  model: string;
+  language: string;
+  whisperBin: string;
+  whisperModel: string;
+}
+
 export interface CreatorSettings {
   pexelsApiKey: string;
   llm: {
@@ -60,6 +73,7 @@ export interface CreatorSettings {
     resolution: Resolution;
   };
   captions: CaptionSettings;
+  asr: AsrSettings;
 }
 
 export interface VideoScene {
@@ -80,6 +94,12 @@ export interface TtsResult {
   duration: number;
   wordsPath?: string;
   words?: WordToken[];
+}
+
+export interface CutterProgress {
+  task: 'transcribe' | 'export';
+  percent: number;
+  message: string;
 }
 
 export interface RenderProgress {

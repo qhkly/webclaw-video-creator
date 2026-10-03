@@ -1,5 +1,6 @@
-import { Download, Film, LayoutDashboard, ListVideo, PenLine, Play, Settings, Volume2 } from 'lucide-react';
+import { Download, Film, LayoutDashboard, ListVideo, PenLine, Play, Scissors, Settings, Volume2 } from 'lucide-react';
 import { useEffect } from 'react';
+import CutterPage from './pages/CutterPage';
 import ExportPage from './pages/ExportPage';
 import PreviewPage from './pages/PreviewPage';
 import SceneManager from './pages/SceneManager';
@@ -10,9 +11,9 @@ import { getSettings } from './lib/tauri-bridge';
 import { useVideoStore } from './store/useVideoStore';
 import { useI18n, type Locale } from './i18n';
 
-const NAV_KEYS = ['script', 'scenes', 'preview', 'export', 'settings'] as const;
-const NAV_ICONS = { script: PenLine, scenes: ListVideo, preview: LayoutDashboard, export: Film, settings: Settings };
-const NAV_STEPS = { script: '01', scenes: '02', preview: '03', export: '04', settings: '05' };
+const NAV_KEYS = ['cutter', 'script', 'scenes', 'preview', 'export', 'settings'] as const;
+const NAV_ICONS = { cutter: Scissors, script: PenLine, scenes: ListVideo, preview: LayoutDashboard, export: Film, settings: Settings };
+const NAV_STEPS = { cutter: '00', script: '01', scenes: '02', preview: '03', export: '04', settings: '05' };
 
 const LOCALES: Locale[] = ['zh-CN', 'en-US'];
 const LOCALE_LABELS: Record<Locale, string> = { 'zh-CN': '中文', 'en-US': 'EN' };
@@ -113,6 +114,7 @@ export default function App() {
           </div>
         </aside>
         <main className="main">
+          {activePage === 'cutter' && <CutterPage />}
           {activePage === 'script' && <ScriptEditor />}
           {activePage === 'scenes' && <SceneManager />}
           {activePage === 'preview' && <PreviewPage />}

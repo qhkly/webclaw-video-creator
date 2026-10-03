@@ -28,6 +28,33 @@ pub struct CaptionSettings {
     inactive_color: String,
 }
 
+/// Speech-to-text settings for the text-based cutter. `provider`: auto | openai | whisper-cpp | silence.
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase", default)]
+pub struct AsrSettings {
+    provider: String,
+    base_url: String,
+    api_key: String,
+    model: String,
+    language: String,
+    whisper_bin: String,
+    whisper_model: String,
+}
+
+impl Default for AsrSettings {
+    fn default() -> Self {
+        Self {
+            provider: "auto".to_string(),
+            base_url: "https://api.openai.com/v1".to_string(),
+            api_key: String::new(),
+            model: "whisper-1".to_string(),
+            language: String::new(),
+            whisper_bin: String::new(),
+            whisper_model: String::new(),
+        }
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct CreatorSettings {
@@ -35,6 +62,8 @@ pub struct CreatorSettings {
     llm: LlmSettings,
     defaults: DefaultSettings,
     captions: CaptionSettings,
+    #[serde(default)]
+    asr: AsrSettings,
 }
 
 impl Default for CreatorSettings {
@@ -58,6 +87,7 @@ impl Default for CreatorSettings {
                 active_color: "#facc15".to_string(),
                 inactive_color: "#ffffff".to_string(),
             },
+            asr: AsrSettings::default(),
         }
     }
 }

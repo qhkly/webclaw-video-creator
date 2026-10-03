@@ -1,6 +1,16 @@
 import { create } from 'zustand';
 import type { Aspect } from '../constants/aspect';
-import type { CaptionSettings, CreatorSettings, SceneTemplate, VideoScene, VoiceEngine } from '../types';
+import type { AsrSettings, CaptionSettings, CreatorSettings, SceneTemplate, VideoScene, VoiceEngine } from '../types';
+
+export const DEFAULT_ASR: AsrSettings = {
+  provider: 'auto',
+  baseUrl: 'https://api.openai.com/v1',
+  apiKey: '',
+  model: 'whisper-1',
+  language: '',
+  whisperBin: '',
+  whisperModel: '',
+};
 
 const templates: SceneTemplate[] = ['TitleSlide', 'BulletPoints', 'BigStat', 'Quote'];
 
@@ -49,7 +59,7 @@ const defaultScenes: VideoScene[] = [
 
 interface VideoStore {
   scenes: VideoScene[];
-  activePage: 'script' | 'scenes' | 'preview' | 'export' | 'settings';
+  activePage: 'cutter' | 'script' | 'scenes' | 'preview' | 'export' | 'settings';
   aspect: Aspect;
   voice: string;
   engine: VoiceEngine;
@@ -69,7 +79,7 @@ interface VideoStore {
 
 export const useVideoStore = create<VideoStore>((set) => ({
   scenes: defaultScenes,
-  activePage: 'script',
+  activePage: 'cutter',
   aspect: '16:9',
   voice: 'zh-CN-YunxiNeural',
   engine: 'edge',
@@ -99,6 +109,7 @@ export const useVideoStore = create<VideoStore>((set) => ({
       activeColor: '#facc15',
       inactiveColor: '#ffffff',
     },
+    asr: DEFAULT_ASR,
   },
   setActivePage: (activePage) => set({ activePage }),
   setAspect: (aspect) => set({ aspect }),
@@ -106,7 +117,7 @@ export const useVideoStore = create<VideoStore>((set) => ({
   setEngine: (engine) => set({ engine }),
   setSettings: (settings) =>
     set({
-      settings,
+      settings: { ...settings, asr: { ...DEFAULT_ASR, ...settings.asr } },
       voice: settings.defaults.voice,
       aspect: settings.defaults.aspect,
       captions: settings.captions,
