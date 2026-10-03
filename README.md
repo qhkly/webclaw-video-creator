@@ -82,10 +82,22 @@ Preview Remotion templates:
 npm run remotion:preview
 ```
 
+## Agent MCP Server
+
+Video capabilities are also exposed as atomic MCP tools so a coding agent (Claude Code, Codex, …) can direct the
+whole production itself: `video_project_status`, `video_brand_profile_get`, `video_providers_list`,
+`video_media_probe`, `video_scenes_save`, `video_tts_synthesize`, `video_render`, `video_audio_mux`.
+
+```bash
+npm run mcp     # stdio MCP server; workspace = $VIDEO_CREATOR_WORKSPACE or .video-work
+```
+
+Claude Code picks it up from `.mcp.json`. Architecture, Brand DNA format and roadmap: [docs/agent-director.md](docs/agent-director.md).
+
 ## Tests
 
 ```bash
-npm test   # node --test: cut-plan logic, FFmpeg filter/ASR parsing, and a real FFmpeg end-to-end transcribe → cut → export run
+npm test   # node --test: cut-plan logic, FFmpeg filter/ASR parsing, a real FFmpeg transcribe → cut → export run, MCP protocol + tools
 ```
 
 If `ffmpeg-static` fails to run (for example, a truncated download leaves a small binary that exits with 137), reinstall it with `node node_modules/ffmpeg-static/install.js`, or set `FFMPEG_PATH`.
@@ -146,6 +158,8 @@ If signing is required, configure these repository secrets:
 src/             React app
 remotion/        Remotion compositions
 scripts/         Node sidecars for TTS and rendering
+mcp/             MCP server exposing video tools to coding agents
+docs/            Architecture notes
 src-tauri/       Tauri Rust shell and commands
 .github/         CI and release workflows
 ```

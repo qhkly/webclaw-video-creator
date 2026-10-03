@@ -3,6 +3,7 @@ import { mkdir, readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { bundle } from '@remotion/bundler';
 import { renderMedia, selectComposition } from '@remotion/renderer';
+import { stageSceneMedia } from './lib/stage-media.mjs';
 
 const RESOLUTION_SCALE = { '720p': 2 / 3, '1080p': 1, '4K': 2 };
 const FORMAT_CODEC = { MP4: 'h264', MOV: 'prores', WebM: 'vp8' };
@@ -22,14 +23,15 @@ if (!args.scenes) {
 }
 
 await mkdir(outputDir, { recursive: true });
-await mkdir(resolve('.video-work/assets'), { recursive: true });
+const publicDir = resolve('.video-work/assets');
+await mkdir(publicDir, { recursive: true });
 const scenes = JSON.parse(await readFile(scenesPath, 'utf8'));
-inputProps.scenes = scenes;
+inputProps.scenes = await stageSceneMedia(scenes, publicDir);
 if (args.captions) {
   inputProps.captions = JSON.parse(args.captions);
 }
 const entryPoint = resolve('remotion/src/index.ts');
-const serveUrl = await bundle({ entryPoint, publicDir: resolve('.video-work/assets') });
+const serveUrl = await bundle({ entryPoint, publicDir });
 const composition = await selectComposition({
   serveUrl,
   id: 'WebClawVideo',

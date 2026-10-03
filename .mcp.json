@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "video-creator": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["mcp/server.mjs"],
+      "env": {}
+    }
+  }
+}
