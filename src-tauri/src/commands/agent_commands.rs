@@ -428,7 +428,7 @@ async fn cli_version(path: &Path) -> Option<String> {
     Some(first.split(" (").next().unwrap_or(first).trim().to_string())
 }
 
-fn project_dir(app: &AppHandle) -> Result<PathBuf, String> {
+pub fn project_dir(app: &AppHandle) -> Result<PathBuf, String> {
     if let Some(manifest_dir) = option_env!("CARGO_MANIFEST_DIR") {
         if let Some(parent) = PathBuf::from(manifest_dir).parent() {
             return Ok(parent.to_path_buf());

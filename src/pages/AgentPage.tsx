@@ -238,7 +238,7 @@ export default function AgentPage() {
   );
 }
 
-function ApprovalCard({ request, runId }: { request: ApprovalRequest; runId: string | null }) {
+export function ApprovalCard({ request, runId }: { request: ApprovalRequest; runId: string | null }) {
   const { t } = useI18n();
   const [busy, setBusy] = useState(false);
   const decide = async (allow: boolean) => {

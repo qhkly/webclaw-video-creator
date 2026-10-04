@@ -4,9 +4,11 @@
 import { needsApproval, requestApproval } from './approval.mjs';
 import { ToolError } from './context.mjs';
 
-export const SUPPORTED_PROTOCOL_VERSIONS = ['2025-06-18', '2025-03-26', '2024-11-05'];
+export const SUPPORTED_PROTOCOL_VERSIONS = ['2025-06-18', '2025-11-25', '2025-03-26', '2024-11-05'];
+/** Stateless MCP era used by the OpenAI tunnel ("discover first, then plain requests"; no initialize). */
+export const STATELESS_PROTOCOL_VERSION = '2026-07-28';
 
-const SERVER_INFO = { name: 'webclaw-video-creator', title: 'WebClaw Video Creator', version: '0.1.0' };
+export const SERVER_INFO = { name: 'webclaw-video-creator', title: 'WebClaw Video Creator', version: '0.1.0' };
 
 export const SERVER_INSTRUCTIONS = [
   'Video Creator exposes atomic, mostly deterministic video tools. You (the agent) are the director:',
@@ -57,6 +59,16 @@ export function createMcpServer({ tools, ctx, approval = null, log = () => {} })
         return {};
       case 'ping':
         return {};
+      case 'server/discover':
+        // OpenAI's control plane probes with a sessionless server/discover; shape mirrors webcodex/AI Studio.
+        return {
+          resultType: 'complete',
+          ttlMs: 0,
+          cacheScope: 'private',
+          supportedVersions: [STATELESS_PROTOCOL_VERSION, '2025-11-25', '2025-06-18'],
+          capabilities: { tools: { listChanged: false } },
+          _meta: { 'io.modelcontextprotocol/serverInfo': { name: SERVER_INFO.name, version: SERVER_INFO.version } },
+        };
       case 'tools/list':
         return { tools: tools.map(describeTool) };
       case 'tools/call':

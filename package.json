@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "mcp": "node mcp/server.mjs",
+    "mcp:chatgpt": "node mcp/chatgpt-bridge.mjs",
     "build": "tsc && vite build",
     "preview": "vite preview",
     "tauri": "node scripts/tauri.mjs",

@@ -1,5 +1,6 @@
 pub mod agent_commands;
 pub mod asset_commands;
+pub mod chatgpt_commands;
 pub mod cutter_commands;
 pub mod ffmpeg_commands;
 pub mod node_env;

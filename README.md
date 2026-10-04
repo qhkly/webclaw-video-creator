@@ -107,6 +107,26 @@ from a WebCode AI Studio session) so the window never loads another app's fronte
 
 Claude Code picks it up from `.mcp.json`. Architecture, Brand DNA format and roadmap: [docs/agent-director.md](docs/agent-director.md).
 
+### ChatGPT connection (OpenAI Secure Tunnel)
+
+ChatGPT can call the same video tools (and only those) through an OpenAI Secure MCP Tunnel:
+
+```
+ChatGPT custom MCP app → api.openai.com → tunnel-client (local child) → http://127.0.0.1:32159/mcp
+```
+
+- Settings → "ChatGPT 连接 / OpenAI Secure Tunnel": enter the Tunnel ID (`tunnel_` + 32 hex) and a restricted API key
+  (Tunnels Read + Use) from the OpenAI platform, then Start. In ChatGPT choose that tunnel with authentication "None".
+- Port **32159**, bound to 127.0.0.1 only. It never falls back to another port and never uses 32149 (WebCode AI Studio);
+  an occupied port is reported as an error (`VIDEO_CREATOR_MCP_PORT` overrides it).
+- The endpoint requires a local Bearer that tunnel-client reads from a 0600 file; Host/Origin must be loopback.
+- Credentials live in `<app config dir>/chatgpt/config.json` (0600). The UI only sees a masked hint; logs are scrubbed.
+- Remote calls always go through the approval gate (`ask` by default: every write/generation; `auto`: paid generation
+  only). Pending requests appear in the same settings card.
+- tunnel-client v0.0.12 (SHA256-pinned, same table as AI Studio): `VIDEO_CREATOR_TUNNEL_CLIENT_BIN`, our managed cache,
+  AI Studio's managed cache (read-only reuse), `PATH`, then a verified download.
+- Headless: `npm run mcp:chatgpt -- --state-dir <dir> [--no-tunnel]`. The stdio server (`npm run mcp`) is unchanged.
+
 ## Tests
 
 ```bash

@@ -5,6 +5,7 @@ use commands::agent_commands::{
     agent_stop, video_work_dir,
 };
 use commands::asset_commands::fetch_assets;
+use commands::chatgpt_commands::{chatgpt_get_config, chatgpt_save_config, chatgpt_start, chatgpt_status, chatgpt_stop};
 use commands::cutter_commands::{allow_media_preview, export_cut, transcribe_video};
 use commands::ffmpeg_commands::combine_audio_video;
 use commands::render_commands::{render_video, save_scenes_json};
@@ -24,6 +25,7 @@ pub fn run() {
                 let _ = std::fs::create_dir_all(&dir);
                 let _ = app.asset_protocol_scope().allow_directory(&dir, true);
             }
+            commands::chatgpt_commands::autostart(app.handle());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -43,8 +45,17 @@ pub fn run() {
             agent_pending_approvals,
             agent_decide_approval,
             agent_project_snapshot,
+            chatgpt_get_config,
+            chatgpt_save_config,
+            chatgpt_status,
+            chatgpt_start,
+            chatgpt_stop,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
-        .run(|_app_handle, _event| {});
+        .run(|_app_handle, event| {
+            if let tauri::RunEvent::Exit = event {
+                commands::chatgpt_commands::shutdown();
+            }
+        });
 }

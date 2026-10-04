@@ -2133,3 +2133,49 @@ input[type="range"] {
   line-height: 1.5;
   color: var(--muted);
 }
+
+/* ChatGPT connection (Settings) */
+.chatgpt-card {
+  margin-top: 16px;
+}
+
+.chatgpt-status,
+.chatgpt-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.chatgpt-facts {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 6px 14px;
+  margin: 0;
+  font-size: 12px;
+}
+
+.chatgpt-facts dt {
+  color: var(--muted);
+  font-weight: 800;
+}
+
+.chatgpt-facts dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.chatgpt-error {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
+  color: var(--danger);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.chatgpt-approvals {
+  display: grid;
+  gap: 10px;
+}

@@ -1,6 +1,7 @@
 import { AudioLines, Save, Settings, Subtitles } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import type { Aspect, Resolution } from '../constants/aspect';
+import ChatgptConnectionCard from '../components/ChatgptConnectionCard';
 import { getSettings, saveSettings } from '../lib/tauri-bridge';
 import { DEFAULT_ASR, useVideoStore } from '../store/useVideoStore';
 import type { AsrSettings, CaptionSettings, CreatorSettings } from '../types';
@@ -193,6 +194,7 @@ export default function SettingsPanel() {
           </div>
         </div>
       </div>
+      <ChatgptConnectionCard />
       <div className="settings-actions">
         <button
           className="btn btn-primary"

@@ -62,3 +62,42 @@ export const onAgentEvent = (handler: (event: AgentRawEvent) => void) =>
 
 /** Rendered files live under .video-work, which the app allows on the asset protocol. */
 export const previewSrc = (path: string) => convertFileSrc(path);
+
+// ChatGPT connection (OpenAI Secure Tunnel). The API key is write-only from the UI: the view never contains it.
+export const CHATGPT_RUN_ID = 'chatgpt';
+
+export interface ChatgptConfigView {
+  tunnelId: string;
+  hasApiKey: boolean;
+  apiKeyHint: string;
+  autoStart: boolean;
+  approval: ApprovalMode;
+}
+
+export interface ChatgptStatus {
+  running: boolean;
+  port: number;
+  mcpUrl: string;
+  status: null | {
+    state: 'starting' | 'running' | 'mcp_only' | 'error' | 'stopped';
+    toolCount: number;
+    requestCount: number;
+    lastRequestAt: string | null;
+    lastTool: string | null;
+    error: string | null;
+    mcp: { port: number | null; url: string | null };
+    tunnel: { state: string; tunnelId: string; source: string | null; error: string | null };
+  };
+  lastError: string | null;
+  config: ChatgptConfigView;
+  logPath: string;
+}
+
+export const chatgptStatus = () => invoke<ChatgptStatus>('chatgpt_status');
+
+export const chatgptSaveConfig = (input: { tunnelId: string; apiKey?: string; clearApiKey?: boolean; autoStart: boolean; approval: ApprovalMode }) =>
+  invoke<ChatgptConfigView>('chatgpt_save_config', { input });
+
+export const chatgptStart = () => invoke<void>('chatgpt_start');
+
+export const chatgptStop = () => invoke<void>('chatgpt_stop');
