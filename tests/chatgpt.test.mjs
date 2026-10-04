@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
-import { mkdtemp, readFile, stat, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, readFile, stat, writeFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { delimiter, join } from 'node:path';
 import { test } from 'node:test';
@@ -23,7 +24,12 @@ import { createMcpServer } from '../mcp/protocol.mjs';
 import { tools } from '../mcp/tools.mjs';
 import {
   BIN_OVERRIDE_ENV,
+  TUNNEL_CLIENT_VERSION,
+  assetFor,
   buildRunArgs,
+  checkCandidate,
+  resolveTunnelClient,
+  versionMatches,
   controlPlaneErrorMessage,
   parseLoopbackHealthUrl,
   tunnelClientCandidates,
@@ -283,8 +289,9 @@ test('tunnel-client candidates: override, own cache, AI Studio cache (read-only)
     managedRoot: '/state/tools/tunnel-client',
   });
   assert.deepEqual(candidates.map((candidate) => candidate.kind), ['override', 'managed', 'ai-studio', 'path', 'path']);
-  assert.equal(candidates[1].path, join('/state/tools/tunnel-client', '0.0.12', 'darwin-arm64', 'tunnel-client'));
-  assert.match(candidates[2].path, /com\.jiayiqiu\.webcode-ai-studio/);
+  assert.equal(candidates[1].path, join('/state/tools/tunnel-client', TUNNEL_CLIENT_VERSION, 'darwin-arm64', 'tunnel-client'));
+  // AI Studio's cache is only probed at *our* version directory, never at whatever version it happens to hold.
+  assert.equal(candidates[2].path, join('/Users/me', 'Library', 'Application Support', 'com.jiayiqiu.webcode-ai-studio', 'tools', 'tunnel-client', TUNNEL_CLIENT_VERSION, 'darwin-arm64', 'tunnel-client'));
   assert.equal(candidates[1].sha256, candidates[2].sha256);
   assert.equal(tunnelClientCandidates({ env: {}, platform: 'sunos', arch: 'x64' }).length, 0);
 });
@@ -312,4 +319,78 @@ test('stdio MCP regression: server.mjs still speaks newline JSON-RPC', async () 
   assert.equal(byId.get(2).result.tools.length, tools.length);
   assert.equal(byId.get(3).result.structuredContent.workspace, workspace);
   assert.equal(responses.length, 3, 'notification produced no response');
+});
+
+test('tunnel-client baseline is v0.0.15 with release-sourced hashes', () => {
+  assert.equal(TUNNEL_CLIENT_VERSION, '0.0.15');
+  const asset = assetFor('darwin', 'arm64');
+  assert.equal(asset.fileName, 'tunnel-client-v0.0.15-darwin-arm64.zip');
+  // From the v0.0.15 release's SHA256SUMS.txt and tunnel-client-v0.0.15-darwin-arm64.spdx.json.
+  assert.equal(asset.archiveSha256, 'b2cae3aa9df45b4c2fe9b1d700ebacce39f9feb6a6b46b86e6499f9a51bf72ff');
+  assert.equal(asset.binarySha256, 'f534872593a60b12560b6c74cbbf94adf6f7e1d9fdd67a3f59b8268ff8a8249c');
+  // The v0.0.12 hash (what AI Studio pins) must not be accepted anymore.
+  assert.notEqual(asset.binarySha256, 'b1757220cf4722cec9085ee4a908cf0ee4c1a499a33bd99979b9a9c7669e29b1');
+  for (const [platform, arch] of [['linux', 'x64'], ['linux', 'arm64'], ['darwin', 'x64'], ['win32', 'x64'], ['win32', 'arm64']]) {
+    const other = assetFor(platform, arch);
+    assert.match(other.archiveSha256, /^[0-9a-f]{64}$/);
+    assert.match(other.binarySha256, /^[0-9a-f]{64}$/);
+    assert.ok(other.fileName.includes(`v${TUNNEL_CLIENT_VERSION}`));
+  }
+
+  assert.equal(versionMatches('0.0.15+a390c168ff1b (git sha: a390c168ff1b)'), true);
+  assert.equal(versionMatches('0.0.15'), true);
+  assert.equal(versionMatches('0.0.12+881c9a8f (git sha: 881c9a8f)'), false);
+  assert.equal(versionMatches('0.0.150+x'), false);
+  assert.equal(versionMatches(''), false);
+});
+
+/** A fake tunnel-client that answers `--version` like the real one. */
+async function fakeClient(path, version) {
+  await mkdir(join(path, '..'), { recursive: true });
+  await writeFile(path, `#!/bin/sh\necho "${version}+deadbeef (git sha: deadbeef)"\n`);
+  await chmod(path, 0o755);
+  return createHash('sha256').update(await readFile(path)).digest('hex');
+}
+
+test('tunnel-client candidates: old AI Studio v0.0.12 cache is skipped, exact-version candidate passes', { skip: process.platform === 'win32' }, async () => {
+  const home = await tempDir('vc-home-');
+  const studioRoot = join(home, 'Library', 'Application Support', 'com.jiayiqiu.webcode-ai-studio', 'tools', 'tunnel-client');
+  // What AI Studio has today: a v0.0.12 copy. It sits in a different version directory and is never a candidate.
+  await fakeClient(join(studioRoot, '0.0.12', 'darwin-arm64', 'tunnel-client'), '0.0.12');
+  const bin = await tempDir('vc-bin-');
+  const lines = [];
+  await assert.rejects(
+    resolveTunnelClient({ env: { PATH: bin }, platform: 'darwin', arch: 'arm64', home, managedRoot: join(home, 'own'), download: false, log: (line) => lines.push(line) }),
+    /没有可用的 tunnel-client 0\.0\.15/,
+  );
+
+  // An old binary dropped into the v0.0.15 slot (or a corrupted copy) fails the SHA pin and is skipped too.
+  const studioCandidate = join(studioRoot, TUNNEL_CLIENT_VERSION, 'darwin-arm64', 'tunnel-client');
+  const oldSha = await fakeClient(studioCandidate, '0.0.12');
+  const pinned = assetFor('darwin', 'arm64').binarySha256;
+  assert.deepEqual(await checkCandidate({ kind: 'ai-studio', path: studioCandidate, sha256: pinned }), { ok: false, reason: 'sha256 mismatch' });
+  // Even with a matching hash, the version must be exactly ours.
+  const wrongVersion = await checkCandidate({ kind: 'ai-studio', path: studioCandidate, sha256: oldSha });
+  assert.equal(wrongVersion.ok, false);
+  assert.match(wrongVersion.reason, /版本不符/);
+
+  // Correct version + matching hash -> accepted.
+  const goodSha = await fakeClient(studioCandidate, TUNNEL_CLIENT_VERSION);
+  assert.deepEqual(await checkCandidate({ kind: 'ai-studio', path: studioCandidate, sha256: goodSha }), { ok: true });
+  assert.deepEqual(await checkCandidate({ kind: 'path', path: join(bin, 'missing') }), { ok: false, reason: 'missing' });
+
+  // Resolver end to end: AI Studio slot fails the real pin (fake bytes) and is logged as skipped;
+  // PATH v0.0.12 is skipped; PATH v0.0.15 is chosen.
+  await fakeClient(join(bin, 'tunnel-client'), '0.0.12');
+  await assert.rejects(resolveTunnelClient({ env: { PATH: bin }, platform: 'darwin', arch: 'arm64', home, download: false, log: (line) => lines.push(line) }));
+  assert.ok(lines.some((line) => line.includes('ai-studio') && line.includes('sha256 mismatch')), lines.join('\n'));
+  assert.ok(lines.some((line) => line.includes('path') && line.includes('版本不符')), lines.join('\n'));
+  await fakeClient(join(bin, 'tunnel-client'), TUNNEL_CLIENT_VERSION);
+  const resolved = await resolveTunnelClient({ env: { PATH: bin }, platform: 'darwin', arch: 'arm64', home, download: false });
+  assert.deepEqual(resolved, { path: join(bin, 'tunnel-client'), source: 'path' });
+
+  // An explicit override with the wrong version is an error, not a silent fallback.
+  const override = join(bin, 'override-tc');
+  await fakeClient(override, '0.0.12');
+  await assert.rejects(resolveTunnelClient({ env: { [BIN_OVERRIDE_ENV]: override, PATH: bin }, platform: 'darwin', arch: 'arm64', home, download: false }), /版本不符/);
 });

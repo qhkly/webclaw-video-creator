@@ -123,8 +123,11 @@ ChatGPT custom MCP app → api.openai.com → tunnel-client (local child) → ht
 - Credentials live in `<app config dir>/chatgpt/config.json` (0600). The UI only sees a masked hint; logs are scrubbed.
 - Remote calls always go through the approval gate (`ask` by default: every write/generation; `auto`: paid generation
   only). Pending requests appear in the same settings card.
-- tunnel-client v0.0.12 (SHA256-pinned, same table as AI Studio): `VIDEO_CREATOR_TUNNEL_CLIENT_BIN`, our managed cache,
-  AI Studio's managed cache (read-only reuse), `PATH`, then a verified download.
+- tunnel-client: Video Creator pins its own baseline, currently **v0.0.15** (latest public release; v0.0.14+ is the
+  validated target for MCP 2026-07-28 sessionless requests). Archive/binary SHA256 come from the release's
+  `SHA256SUMS.txt` and SPDX files (see `mcp/tunnel-client.mjs`). Lookup: `VIDEO_CREATOR_TUNNEL_CLIENT_BIN`, our managed
+  cache, AI Studio's managed cache (read-only, used only if it holds exactly this version and matches the SHA), `PATH`
+  (exact version), then a verified download into our own cache.
 - Headless: `npm run mcp:chatgpt -- --state-dir <dir> [--no-tunnel]`. The stdio server (`npm run mcp`) is unchanged.
 
 ## Tests

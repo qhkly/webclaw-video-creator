@@ -1,11 +1,19 @@
 // OpenAI's official `tunnel-client` binary: locating, verifying and invoking it.
 //
-// Same pinned release and SHA256 table as WebCode AI Studio (core/src/openai_tunnel.rs),
-// so either app can verify a copy the other downloaded. Candidate order:
+// Video Creator pins its own baseline: the latest public release at the time of
+// writing (OpenAI's Secure MCP Tunnel docs recommend the latest public release;
+// v0.0.14+ is the validated target for MCP 2026-07-28 sessionless requests, which
+// http.mjs serves). Hashes come from the release itself, never from a local download:
+//   archiveSha256 — the release's SHA256SUMS.txt
+//   binarySha256  — the `tunnel-client` file entry in the release's <target>.spdx.json
+// Upgrading = bump TUNNEL_CLIENT_VERSION and replace the table from those two files.
+//
+// Candidate order (every candidate must be exactly TUNNEL_CLIENT_VERSION):
 //   1. VIDEO_CREATOR_TUNNEL_CLIENT_BIN (explicit override; version-checked, errors are reported)
-//   2. our own managed cache            (SHA-pinned)
-//   3. AI Studio's managed cache         (read-only reuse, SHA-pinned; never written to)
-//   4. tunnel-client on PATH             (version-checked)
+//   2. our own managed cache            (SHA-pinned + version-checked)
+//   3. WebCode AI Studio's managed cache (read-only reuse, only its <our version>/<target> copy,
+//                                         SHA-pinned + version-checked; other versions are skipped)
+//   4. tunnel-client on PATH             (exact version check)
 //   5. download into our managed cache   (archive + binary SHA verified before install)
 import { createHash, randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
@@ -13,19 +21,20 @@ import { chmod, mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/pro
 import { homedir } from 'node:os';
 import { delimiter, join } from 'node:path';
 
-export const TUNNEL_CLIENT_VERSION = '0.0.12';
+export const TUNNEL_CLIENT_VERSION = '0.0.15';
 export const RELEASE_BASE = `https://github.com/openai/tunnel-client/releases/download/v${TUNNEL_CLIENT_VERSION}`;
 export const BIN_OVERRIDE_ENV = 'VIDEO_CREATOR_TUNNEL_CLIENT_BIN';
 const AI_STUDIO_IDENTIFIER = 'com.jiayiqiu.webcode-ai-studio';
 const MAX_DOWNLOAD_BYTES = 64 * 1024 * 1024;
 
+// v0.0.15 (2026-09-25). Source: github.com/openai/tunnel-client/releases/tag/v0.0.15
 const ASSETS = {
-  'linux-x64': { target: 'linux-amd64', archiveSha256: '2bb693bd7b5cd28da7ce09cd9e309529dbb33b7cc9dc0058e62a064688f92c81', binarySha256: 'ee9d4a75bc0b42f36f345aa96231e0db1ab00488122f34ebc99d6db055b6603e' },
-  'linux-arm64': { target: 'linux-arm64', archiveSha256: '6813878a3edb82ebebb32fe5a859bc6327a81cce5bc7b635a2313174d26365d6', binarySha256: '0a48e6696de0df5951c013e40be81ce775e6644e209758c48795a0ecbda06406' },
-  'darwin-x64': { target: 'darwin-amd64', archiveSha256: '33de53aec680faafedc795f8f8268d6861577bddb871cb2d49529c91f88c2009', binarySha256: '4133dab2575223252732a998210c34b7ed96a51765cf5ea835a8e24cf2be1272' },
-  'darwin-arm64': { target: 'darwin-arm64', archiveSha256: '42fb3138dc9c081d5777cb7e8bd1e041cc48b67c4978dbab3c5167ca1aabca02', binarySha256: 'b1757220cf4722cec9085ee4a908cf0ee4c1a499a33bd99979b9a9c7669e29b1' },
-  'win32-x64': { target: 'windows-amd64', archiveSha256: '2a2804933924e38a502d62b61f0266cb80d56d65744f4c29876b2bf9c1544356', binarySha256: '6649169733686805ca16cccd91774594d0c017fd729c37ad4ce1cd18323d9ae8' },
-  'win32-arm64': { target: 'windows-arm64', archiveSha256: '65ab54221554481bb1c23b6015b99abe0b7f79b08593f4fb17a9e2e25532281d', binarySha256: '480684ec1031fc2985c7e87f9d669e7dfda4012a8ecdab21eabe1b5deafdd656' },
+  'linux-x64': { target: 'linux-amd64', archiveSha256: '8c836dc5d68d68b663d9a5c5b28ff9fa780d9f7a3fffb1c306880b8f32fab5f1', binarySha256: '286769f6b1b1837e89896b4684a3ec59c919f860fa2bc159442e3839b6468711' },
+  'linux-arm64': { target: 'linux-arm64', archiveSha256: 'c51bfd883fc22e3445494a03c0179875176564bde470661b308fd83af5d01abb', binarySha256: '7764a78fc39ee04d1fc2ae74436df019d85de2a9d93de7c82030e14ef5ae93a0' },
+  'darwin-x64': { target: 'darwin-amd64', archiveSha256: '9dcae1e2fb121287e73271edb7b853dda52aa86b7bfca1df91bc275371261bdb', binarySha256: 'c5e63f95c1142fc90d20275d811029d1854a04ae5d5ee79240d8bdc7a141c641' },
+  'darwin-arm64': { target: 'darwin-arm64', archiveSha256: 'b2cae3aa9df45b4c2fe9b1d700ebacce39f9feb6a6b46b86e6499f9a51bf72ff', binarySha256: 'f534872593a60b12560b6c74cbbf94adf6f7e1d9fdd67a3f59b8268ff8a8249c' },
+  'win32-x64': { target: 'windows-amd64', archiveSha256: '3b53133a1e24d43f63088d843860cb1701a4c3ed6390de2e19f69089e43bddc1', binarySha256: '1946de55a038313a9b9b2458d05fe1719fa9cf1f20a94dd5f38fc26a98bfdd42' },
+  'win32-arm64': { target: 'windows-arm64', archiveSha256: '571e0d59ed9e86d1b105dc34f3267865f654de6968b01efd7c847f0af657d11d', binarySha256: '420a3a5536c0f598b9e6216f9b0c9324214f24eb8f3a61d7203d76163c266871' },
 };
 
 export function executableName(platform = process.platform) {
@@ -72,8 +81,16 @@ export function tunnelClientCandidates({ env = process.env, platform = process.p
   return candidates;
 }
 
-export async function resolveTunnelClient({ managedRoot, env = process.env, log = () => {} } = {}) {
-  for (const candidate of tunnelClientCandidates({ env, managedRoot })) {
+export async function resolveTunnelClient({
+  managedRoot,
+  env = process.env,
+  log = () => {},
+  platform = process.platform,
+  arch = process.arch,
+  home = homedir(),
+  download = true,
+} = {}) {
+  for (const candidate of tunnelClientCandidates({ env, platform, arch, home, managedRoot })) {
     if (candidate.kind === 'override') {
       if (!(await isFile(candidate.path))) {
         throw new Error(`${BIN_OVERRIDE_ENV} 指向的不是一个文件: ${candidate.path}`);
@@ -81,28 +98,42 @@ export async function resolveTunnelClient({ managedRoot, env = process.env, log 
       await verifyVersion(candidate.path);
       return { path: candidate.path, source: candidate.kind };
     }
-    if (!(await isFile(candidate.path))) {
-      continue;
-    }
-    if (candidate.sha256) {
-      if ((await sha256File(candidate.path)) === candidate.sha256) {
-        return { path: candidate.path, source: candidate.kind };
-      }
-      continue;
-    }
-    if (await verifyVersion(candidate.path).then(() => true, () => false)) {
+    const verdict = await checkCandidate(candidate);
+    if (verdict.ok) {
       return { path: candidate.path, source: candidate.kind };
     }
+    if (verdict.reason !== 'missing') {
+      log(`skip tunnel-client ${candidate.kind} ${candidate.path}: ${verdict.reason}`);
+    }
   }
-  const asset = assetFor();
+  const asset = assetFor(platform, arch);
   if (!asset) {
-    throw new Error(`${process.platform}/${process.arch} 上没有可自动安装的 tunnel-client，请自行安装并设置 ${BIN_OVERRIDE_ENV}`);
+    throw new Error(`${platform}/${arch} 上没有可自动安装的 tunnel-client，请自行安装并设置 ${BIN_OVERRIDE_ENV}`);
   }
-  if (!managedRoot) {
-    throw new Error('没有可用的 tunnel-client');
+  if (!managedRoot || !download) {
+    throw new Error(`没有可用的 tunnel-client ${TUNNEL_CLIENT_VERSION}`);
   }
   log(`downloading tunnel-client ${TUNNEL_CLIENT_VERSION} (${asset.target})`);
   return { path: await installManaged(join(managedRoot, TUNNEL_CLIENT_VERSION, asset.target), asset), source: 'downloaded' };
+}
+
+/**
+ * Whether a non-override candidate is usable: it must exist, match the pinned SHA256
+ * when one applies, and report exactly TUNNEL_CLIENT_VERSION. Anything else is skipped.
+ */
+export async function checkCandidate(candidate) {
+  if (!(await isFile(candidate.path))) {
+    return { ok: false, reason: 'missing' };
+  }
+  if (candidate.sha256 && (await sha256File(candidate.path)) !== candidate.sha256) {
+    return { ok: false, reason: 'sha256 mismatch' };
+  }
+  try {
+    await verifyVersion(candidate.path);
+  } catch (error) {
+    return { ok: false, reason: error.message };
+  }
+  return { ok: true };
 }
 
 /** Download, verify both SHA256s, then rename into place (a half-installed file never sits at the final path). */
@@ -150,9 +181,15 @@ async function extractMember(archive, member, destination) {
 
 export async function verifyVersion(path) {
   const result = await runCapture(path, ['--version'], { timeoutMs: 10_000 });
-  if (result.code !== 0 || !result.output.trim().startsWith(TUNNEL_CLIENT_VERSION)) {
+  if (result.code !== 0 || !versionMatches(result.output)) {
     throw new Error(`tunnel-client 版本不符（需要 ${TUNNEL_CLIENT_VERSION}）: ${lastLine(result.output) || `exit ${result.code}`}`);
   }
+}
+
+/** `--version` prints "0.0.15+<sha> (git sha: …)"; require exactly our version (0.0.150 or 0.0.12 do not match). */
+export function versionMatches(output) {
+  const reported = /^v?(\d+\.\d+\.\d+)(?=[+\s]|$)/.exec(String(output).trim());
+  return reported?.[1] === TUNNEL_CLIENT_VERSION;
 }
 
 /**
