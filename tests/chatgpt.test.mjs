@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import { delimiter, join } from 'node:path';
 import { test } from 'node:test';
 import { APP_ROOT } from '../mcp/context.mjs';
-import { CHATGPT_RUN_ID, deriveState, loadOrCreateToken, startBridge } from '../mcp/chatgpt-bridge.mjs';
+import { CHATGPT_RUN_ID, deriveState, loadOrCreateToken, marksChatgptDelivery, startBridge } from '../mcp/chatgpt-bridge.mjs';
 import { WORKSPACE_ACCESS, parseTunnelMetadata, workspaceAccessFromMetadata } from '../mcp/tunnel-workspace.mjs';
 import {
   DEFAULT_CONFIG,
@@ -350,6 +350,35 @@ test('deriveState: local green must not mask ChatGPT-side truth', () => {
   assert.equal(deriveState({ ...base, error: 'boom' }), 'error');
   assert.equal(deriveState({ ...base, stoppedAt: 'now' }), 'stopped');
   assert.equal(deriveState({ ...base, tunnel: { state: 'stopped', workspaceAccess: null } }), 'mcp_only');
+});
+
+test('chatgpt.seen: tunnel-client startup handshake must not count as ChatGPT traffic', () => {
+  // What the live v0.0.15 log shows at startup: one initialize from tunnel-client's
+  // own probing ("mcp session initialized"), and nothing else until the OpenAI side
+  // actually sends something. None of these may mark delivery.
+  for (const local of ['initialize', 'notifications/initialized', 'ping', '', undefined, null]) {
+    assert.equal(marksChatgptDelivery(local), false, JSON.stringify(local));
+  }
+  // Only remote-verifiable methods do.
+  for (const remote of ['server/discover', 'tools/list', 'tools/call']) {
+    assert.equal(marksChatgptDelivery(remote), true);
+  }
+
+  // Replay the exact startup scenario from the field log against the fold:
+  // tunnel running, workspace associated, exactly one local initialize seen.
+  const startup = {
+    stoppedAt: null,
+    error: null,
+    mcp: { port: 32159, url: 'http://127.0.0.1:32159/mcp' },
+    tunnel: { state: 'running', workspaceAccess: WORKSPACE_ACCESS.ASSOCIATED },
+    chatgpt: { seen: false, lastMethod: 'initialize', lastAt: '2026-10-05T00:28:04.027Z' },
+  };
+  // lastMethod recorded the handshake, but seen stayed false -> NOT connected.
+  assert.equal(deriveState(startup), 'awaiting_chatgpt');
+  // The methods the task names as real evidence flip it.
+  for (const remote of ['server/discover', 'tools/list', 'tools/call']) {
+    assert.equal(deriveState({ ...startup, chatgpt: { seen: true, lastMethod: remote, lastAt: 'now' } }), 'running');
+  }
 });
 
 test('tunnel-client candidates: override, own cache, AI Studio cache (read-only), PATH', () => {

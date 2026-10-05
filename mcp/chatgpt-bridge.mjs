@@ -46,6 +46,24 @@ const PROBE_TIMEOUT_MS = 20_000;
 /** While ChatGPT cannot reach the tunnel (workspace association missing), re-read tunnel metadata this often. */
 const WORKSPACE_RECHECK_MS = 30_000;
 
+/**
+ * Does this MCP method prove that a request was delivered from the OpenAI side?
+ *
+ * tunnel-client itself performs a startup handshake against /mcp and nothing
+ * else — verified against a live v0.0.15 tunnel.log ("Probing MCP server" ->
+ * "mcp session initialized", one `initialize` request, zero dispatcher
+ * forwardings over 74 minutes) and matching webcode-ai-studio's chatgpt_stateless
+ * comment: "tunnel-client 是启动时 initialize 一次、之后一直攥着那个会话 ID"。
+ * So `initialize`/notifications/ping prove the local leg only and must never
+ * mark ChatGPT as connected. `server/discover` is the control plane's probe;
+ * `tools/list`/`tools/call` are only dispatched when the OpenAI side sends them.
+ * AI Studio draws the same line: "ChatGPT 已连接" is recorded by real tool
+ * execution only (record_chatgpt_activity), never by tunnel/health probes.
+ */
+export function marksChatgptDelivery(method) {
+  return method === 'server/discover' || method === 'tools/list' || method === 'tools/call';
+}
+
 export function defaultStateDir(env = process.env) {
   return env.VIDEO_CREATOR_CHATGPT_DIR || join(homedir(), '.webclaw-video-creator', 'chatgpt');
 }
@@ -146,9 +164,9 @@ export async function startBridge({
       onRequest: ({ method, tool }) => {
         status.requestCount += 1;
         status.lastRequestAt = new Date().toISOString();
-        // Any real MCP method delivered through the tunnel proves the ChatGPT leg;
-        // "running" alone must never be displayed as "ChatGPT connected".
-        if (typeof method === 'string' && method !== '') {
+        // Only remote-verifiable methods prove the ChatGPT leg: tunnel-client's own
+        // startup handshake (initialize + notifications) must not fake "connected".
+        if (typeof method === 'string' && marksChatgptDelivery(method)) {
           status.chatgpt.seen = true;
           status.chatgpt.lastMethod = method;
           status.chatgpt.lastAt = status.lastRequestAt;
