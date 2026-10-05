@@ -1,8 +1,8 @@
 #!/usr/bin/env node
-import { access, mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
-import { pathToFileURL } from 'node:url';
-import { spawn } from 'node:child_process';
+import { findFfmpeg, probeMedia, run } from './lib/media.mjs';
+import { normalizeNarration } from './lib/tts-audio.mjs';
 
 const args = parseArgs(process.argv.slice(2));
 const text = args.text || '';
@@ -26,11 +26,17 @@ if (engine === 'f5') {
   });
 }
 
-const duration = await probeDuration(output, text);
+const ffmpeg = await findFfmpeg();
+const normalized = await normalizeNarration(ffmpeg, output, run);
+if (!normalized.normalized && normalized.warning) {
+  console.error(JSON.stringify({ warning: `loudness normalization skipped: ${normalized.warning}` }));
+}
+const probed = await probeMedia(ffmpeg, output).catch(() => ({ duration: 0 }));
+const duration = probed.duration > 0 ? probed.duration : Math.max(2, text.length / 8);
 const words = edgeWords.length > 0 ? normalizeEdgeWords(edgeWords, duration) : estimateWords(text, duration);
 const wordsPath = output.replace(/\.[^.]+$/, '.words.json');
 await writeFile(wordsPath, JSON.stringify(words, null, 2));
-console.log(JSON.stringify({ output, duration, wordsPath, words }));
+console.log(JSON.stringify({ output, duration, wordsPath, words, normalizedLoudness: normalized.normalized }));
 
 async function synthesizeWithEdge({ text, voice, output }) {
   const { Communicate } = await import('@duyquangnvx/edge-tts');
@@ -132,46 +138,6 @@ function ticksToMs(value) {
 
 function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
-}
-
-async function probeDuration(output, text) {
-  const ffprobe = await findFfprobe();
-  if (!ffprobe) {
-    return Math.max(2, text.length / 8);
-  }
-  return new Promise((resolveDuration) => {
-    const child = spawn(ffprobe, [
-      '-v',
-      'error',
-      '-show_entries',
-      'format=duration',
-      '-of',
-      'default=noprint_wrappers=1:nokey=1',
-      output,
-    ]);
-    let stdout = '';
-    child.stdout.on('data', (data) => {
-      stdout += data.toString();
-    });
-    child.on('close', () => {
-      const parsed = Number(stdout.trim());
-      resolveDuration(Number.isFinite(parsed) && parsed > 0 ? parsed : Math.max(2, text.length / 8));
-    });
-  });
-}
-
-async function findFfprobe() {
-  try {
-    const ffmpegPath = (await import('ffmpeg-static')).default;
-    if (!ffmpegPath) {
-      return null;
-    }
-    const ffprobe = ffmpegPath.replace(/ffmpeg(\.exe)?$/, process.platform === 'win32' ? 'ffprobe.exe' : 'ffprobe');
-    await access(ffprobe);
-    return ffprobe;
-  } catch {
-    return null;
-  }
 }
 
 function parseArgs(argv) {

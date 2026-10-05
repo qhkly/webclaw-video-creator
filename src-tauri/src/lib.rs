@@ -20,7 +20,7 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_shell::init())
         .setup(|app| {
-            // Agent runs write into .video-work; allow previews of those files only.
+            // Video projects live in the stable app-data workspace; allow previews of those files only.
             if let Ok(dir) = video_work_dir(app.handle()) {
                 let _ = std::fs::create_dir_all(&dir);
                 let _ = app.asset_protocol_scope().allow_directory(&dir, true);

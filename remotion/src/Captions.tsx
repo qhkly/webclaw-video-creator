@@ -1,5 +1,6 @@
 import { AbsoluteFill, interpolate, useCurrentFrame, useVideoConfig } from 'remotion';
-import type { CaptionSettings, VideoScene, WordToken } from '../../src/types';
+import type { CaptionSettings, VideoScene } from '../../src/types';
+import { captionTokenText, findCaptionContext } from './caption-groups';
 import { useScale } from './useScale';
 
 interface Props {
@@ -24,50 +25,59 @@ export function Captions({ scenes, settings }: Props) {
     return null;
   }
 
-  const active = findActiveWord(scenes, currentMs);
+  const active = findActiveCaption(scenes, currentMs);
   if (!active) {
     return null;
   }
 
-  const progress = Math.max(0, currentMs - active.startMs);
-  const pop = interpolate(progress, [0, 120], [0.88, 1], { extrapolateRight: 'clamp' });
-  const top = captions.position === 'middle' ? '55%' : undefined;
-  const bottom = captions.position === 'bottom' ? 92 * scale : undefined;
+  const progress = Math.max(0, currentMs - active.group.startMs);
+  const pop = interpolate(progress, [0, 140], [0.96, 1], { extrapolateRight: 'clamp' });
+  const isMiddle = captions.position === 'middle';
+  const positionTransform = isMiddle ? 'translateY(-50%) ' : '';
 
   return (
-    <AbsoluteFill style={{ justifyContent: 'flex-end', alignItems: 'center', pointerEvents: 'none' }}>
+    <AbsoluteFill style={{ alignItems: 'center', pointerEvents: 'none' }}>
       <div
         style={{
           position: 'absolute',
-          top,
-          bottom,
+          top: isMiddle ? '50%' : undefined,
+          bottom: isMiddle ? undefined : 92 * scale,
           maxWidth: '82%',
           padding: `${14 * scale}px ${30 * scale}px`,
           borderRadius: 18 * scale,
-          background: 'rgba(2, 6, 23, 0.58)',
+          background: 'rgba(2, 6, 23, 0.62)',
           color: captions.inactiveColor,
           fontSize: captions.fontSize * scale,
           fontWeight: 900,
-          lineHeight: 1.16,
+          lineHeight: 1.2,
           textAlign: 'center',
           textShadow: '0 3px 10px rgba(0,0,0,0.85), 0 0 2px rgba(0,0,0,0.95)',
           WebkitTextStroke: `${Math.max(1, 2 * scale)}px rgba(0,0,0,0.52)`,
-          transform: `scale(${pop})`,
+          transform: `${positionTransform}scale(${pop})`,
+          whiteSpace: 'pre-wrap',
         }}
       >
-        <span style={{ color: captions.activeColor }}>{active.text}</span>
+        {active.group.words.map((word, index) => (
+          <span
+            key={`${word.startMs}-${index}`}
+            style={{
+              color: index === active.activeIndex ? captions.activeColor : captions.inactiveColor,
+            }}
+          >
+            {captionTokenText(index > 0 ? active.group.words[index - 1] : undefined, word)}
+          </span>
+        ))}
       </div>
     </AbsoluteFill>
   );
 }
 
-function findActiveWord(scenes: VideoScene[], currentMs: number): WordToken | undefined {
+function findActiveCaption(scenes: VideoScene[], currentMs: number) {
   let offset = 0;
   for (const scene of scenes) {
     const durationMs = scene.duration * 1000;
     if (currentMs >= offset && currentMs < offset + durationMs) {
-      const localMs = currentMs - offset;
-      return scene.captions?.find((word) => localMs >= word.startMs && localMs <= word.startMs + Math.max(80, word.durationMs));
+      return findCaptionContext(scene.captions, currentMs - offset);
     }
     offset += durationMs;
   }

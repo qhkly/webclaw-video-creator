@@ -370,9 +370,107 @@ pub async fn agent_project_snapshot(app: AppHandle, project: String) -> Result<V
     Ok(json!({ "project": project, "dir": dir.to_string_lossy(), "scenes": scenes, "renders": renders }))
 }
 
-/// The directory agent runs write into; the asset protocol may serve files from it for previews.
+/// Stable persistent workspace shared by the UI, local agents and ChatGPT.
+///
+/// This must not live under the source checkout: in development that path changes
+/// with the active git worktree, and in a packaged app the resource directory may
+/// be read-only. Existing .video-work data is copied once into app data without
+/// deleting the legacy directory.
 pub fn video_work_dir(app: &AppHandle) -> Result<PathBuf, String> {
-    Ok(project_dir(app)?.join(".video-work"))
+    let app_data = app
+        .path()
+        .app_data_dir()
+        .map_err(|error| format!("failed to resolve app data directory: {error}"))?;
+    let legacy = project_dir(app)?.join(".video-work");
+    resolve_video_work_dir(&app_data, &legacy)
+}
+
+fn resolve_video_work_dir(app_data: &Path, legacy: &Path) -> Result<PathBuf, String> {
+    let target = app_data.join("video-work");
+    if target.exists() {
+        return Ok(target);
+    }
+    std::fs::create_dir_all(app_data)
+        .map_err(|error| format!("failed to create app data directory {}: {error}", app_data.display()))?;
+
+    if legacy.is_dir() {
+        migrate_legacy_video_work(legacy, &target)?;
+        let marker = legacy.join(".migrated-to-app-data");
+        let _ = std::fs::write(&marker, format!("{}\n", target.display()));
+    } else {
+        std::fs::create_dir_all(&target)
+            .map_err(|error| format!("failed to create video workspace {}: {error}", target.display()))?;
+    }
+    Ok(target)
+}
+
+fn migrate_legacy_video_work(legacy: &Path, target: &Path) -> Result<(), String> {
+    if target.exists() {
+        return Ok(());
+    }
+    let parent = target.parent().ok_or_else(|| format!("video workspace has no parent: {}", target.display()))?;
+    std::fs::create_dir_all(parent).map_err(|error| format!("failed to create {}: {error}", parent.display()))?;
+    let staging = parent.join(format!(".video-work-migrating-{}", std::process::id()));
+    if staging.exists() {
+        std::fs::remove_dir_all(&staging)
+            .map_err(|error| format!("failed to clear stale migration {}: {error}", staging.display()))?;
+    }
+    copy_dir_recursive(legacy, &staging)?;
+    match std::fs::rename(&staging, target) {
+        Ok(()) => Ok(()),
+        Err(_error) if target.exists() => {
+            let _ = std::fs::remove_dir_all(&staging);
+            Ok(())
+        }
+        Err(error) => {
+            let _ = std::fs::remove_dir_all(&staging);
+            Err(format!(
+                "failed to publish migrated video workspace {} -> {}: {error}",
+                staging.display(),
+                target.display()
+            ))
+        }
+    }
+}
+
+fn copy_dir_recursive(source: &Path, target: &Path) -> Result<(), String> {
+    std::fs::create_dir_all(target).map_err(|error| format!("failed to create {}: {error}", target.display()))?;
+    let entries = std::fs::read_dir(source).map_err(|error| format!("failed to read {}: {error}", source.display()))?;
+    for entry in entries {
+        let entry = entry.map_err(|error| format!("failed to read entry under {}: {error}", source.display()))?;
+        let from = entry.path();
+        let to = target.join(entry.file_name());
+        let file_type = entry.file_type().map_err(|error| format!("failed to inspect {}: {error}", from.display()))?;
+        if file_type.is_dir() {
+            copy_dir_recursive(&from, &to)?;
+        } else if file_type.is_file() {
+            std::fs::copy(&from, &to)
+                .map_err(|error| format!("failed to copy {} -> {}: {error}", from.display(), to.display()))?;
+        } else if file_type.is_symlink() {
+            copy_symlink(&from, &to)?;
+        }
+    }
+    Ok(())
+}
+
+#[cfg(unix)]
+fn copy_symlink(source: &Path, target: &Path) -> Result<(), String> {
+    use std::os::unix::fs::symlink;
+    let link = std::fs::read_link(source).map_err(|error| format!("failed to read symlink {}: {error}", source.display()))?;
+    symlink(&link, target).map_err(|error| format!("failed to copy symlink {} -> {}: {error}", source.display(), target.display()))
+}
+
+#[cfg(windows)]
+fn copy_symlink(source: &Path, target: &Path) -> Result<(), String> {
+    use std::os::windows::fs::{symlink_dir, symlink_file};
+    let link = std::fs::read_link(source).map_err(|error| format!("failed to read symlink {}: {error}", source.display()))?;
+    let metadata = std::fs::metadata(source).map_err(|error| format!("failed to inspect symlink target {}: {error}", source.display()))?;
+    if metadata.is_dir() {
+        symlink_dir(&link, target)
+    } else {
+        symlink_file(&link, target)
+    }
+    .map_err(|error| format!("failed to copy symlink {} -> {}: {error}", source.display(), target.display()))
 }
 
 fn spawn_line_forwarder<R>(app: AppHandle, run_id: String, stream: &'static str, reader: R)
@@ -438,5 +536,68 @@ pub fn project_dir(app: &AppHandle) -> Result<PathBuf, String> {
         Ok(path) => Ok(path),
         Err(_) => std::env::current_dir()
             .map_err(|error| format!("failed to resolve project directory: {error}")),
+    }
+}
+
+
+#[cfg(test)]
+mod workspace_tests {
+    use super::*;
+
+    fn temp_root(label: &str) -> PathBuf {
+        std::env::temp_dir().join(format!(
+            "webclaw-video-work-{label}-{}-{}",
+            std::process::id(),
+            SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos()
+        ))
+    }
+
+    #[test]
+    fn migration_copies_legacy_without_deleting_it() {
+        let root = temp_root("migrate");
+        let app_data = root.join("app-data");
+        let legacy = root.join("checkout").join(".video-work");
+        std::fs::create_dir_all(legacy.join("projects/demo")).unwrap();
+        std::fs::write(legacy.join("projects/demo/scenes.json"), b"legacy").unwrap();
+
+        let target = resolve_video_work_dir(&app_data, &legacy).unwrap();
+        assert_eq!(target, app_data.join("video-work"));
+        assert_eq!(std::fs::read(target.join("projects/demo/scenes.json")).unwrap(), b"legacy");
+        assert_eq!(std::fs::read(legacy.join("projects/demo/scenes.json")).unwrap(), b"legacy");
+        assert!(legacy.join(".migrated-to-app-data").exists());
+
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn existing_app_data_workspace_wins_without_merging_legacy() {
+        let root = temp_root("existing");
+        let app_data = root.join("app-data");
+        let target = app_data.join("video-work");
+        let legacy = root.join("checkout").join(".video-work");
+        std::fs::create_dir_all(&target).unwrap();
+        std::fs::create_dir_all(&legacy).unwrap();
+        std::fs::write(target.join("new.txt"), b"new").unwrap();
+        std::fs::write(legacy.join("old.txt"), b"old").unwrap();
+
+        assert_eq!(resolve_video_work_dir(&app_data, &legacy).unwrap(), target);
+        assert!(target.join("new.txt").exists());
+        assert!(!target.join("old.txt").exists());
+        assert!(legacy.join("old.txt").exists());
+
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn fresh_workspace_is_created_under_app_data() {
+        let root = temp_root("fresh");
+        let app_data = root.join("app-data");
+        let legacy = root.join("checkout").join(".video-work");
+
+        let target = resolve_video_work_dir(&app_data, &legacy).unwrap();
+        assert_eq!(target, app_data.join("video-work"));
+        assert!(target.is_dir());
+
+        let _ = std::fs::remove_dir_all(root);
     }
 }
