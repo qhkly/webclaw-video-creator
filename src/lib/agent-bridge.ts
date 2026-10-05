@@ -101,3 +101,18 @@ export const chatgptSaveConfig = (input: { tunnelId: string; apiKey?: string; cl
 export const chatgptStart = () => invoke<void>('chatgpt_start');
 
 export const chatgptStop = () => invoke<void>('chatgpt_stop');
+
+// Both credentials can only be created on the OpenAI platform; the card links straight to the right pages.
+export const OPENAI_TUNNEL_CONSOLE_URL = 'https://platform.openai.com/settings/organization/tunnels';
+export const OPENAI_API_KEY_CONSOLE_URL = 'https://platform.openai.com/api-keys';
+export const OPENAI_TUNNEL_DOCS_URL = 'https://developers.openai.com/api/docs/guides/secure-mcp-tunnels';
+
+/** System browser via the app's own allowlisted command; window.open as a last resort (e.g. plain `vite` dev). */
+export const openExternalUrl = (url: string) =>
+  invoke<void>('open_external_url', { url }).catch(() => {
+    try {
+      window.open(url, '_blank', 'noopener');
+    } catch {
+      // nothing else to try
+    }
+  });

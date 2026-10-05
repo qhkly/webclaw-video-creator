@@ -1,12 +1,16 @@
-import { Loader2, Play, PlugZap, Save, Square } from 'lucide-react';
+import { ExternalLink, Loader2, Play, PlugZap, Save, Square } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { useI18n } from '../i18n';
 import {
   CHATGPT_RUN_ID,
+  OPENAI_API_KEY_CONSOLE_URL,
+  OPENAI_TUNNEL_CONSOLE_URL,
+  OPENAI_TUNNEL_DOCS_URL,
   chatgptSaveConfig,
   chatgptStart,
   chatgptStatus,
   chatgptStop,
+  openExternalUrl,
   pendingApprovals,
   type ApprovalMode,
   type ApprovalRequest,
@@ -135,13 +139,37 @@ export default function ChatgptConnectionCard() {
         </div>
       )}
 
-      <label>
-        <span className="field-label">{c.tunnelId}</span>
-        <input className="input" value={tunnelId} onChange={(event) => setTunnelId(event.target.value)} placeholder={c.tunnelIdPlaceholder} spellCheck={false} />
-      </label>
-      <label>
-        <span className="field-label">{c.apiKey}</span>
+      <div className="chatgpt-field">
+        <div className="chatgpt-field-head">
+          <label className="field-label" htmlFor="chatgpt-tunnel-id">
+            {c.tunnelId}
+          </label>
+          <button type="button" className="chatgpt-link" onClick={() => void openExternalUrl(OPENAI_TUNNEL_CONSOLE_URL)}>
+            {c.createTunnel}
+            <ExternalLink size={12} />
+          </button>
+        </div>
         <input
+          id="chatgpt-tunnel-id"
+          className="input"
+          value={tunnelId}
+          onChange={(event) => setTunnelId(event.target.value)}
+          placeholder={c.tunnelIdPlaceholder}
+          spellCheck={false}
+        />
+      </div>
+      <div className="chatgpt-field">
+        <div className="chatgpt-field-head">
+          <label className="field-label" htmlFor="chatgpt-api-key">
+            {c.apiKey}
+          </label>
+          <button type="button" className="chatgpt-link" onClick={() => void openExternalUrl(OPENAI_API_KEY_CONSOLE_URL)}>
+            {c.createApiKey}
+            <ExternalLink size={12} />
+          </button>
+        </div>
+        <input
+          id="chatgpt-api-key"
           className="input"
           type="password"
           autoComplete="off"
@@ -149,7 +177,14 @@ export default function ChatgptConnectionCard() {
           onChange={(event) => setApiKey(event.target.value)}
           placeholder={config?.hasApiKey ? c.apiKeyKeep : 'sk-...'}
         />
-      </label>
+        <p className="settings-hint">
+          {c.apiKeyHelp}{' '}
+          <button type="button" className="chatgpt-link chatgpt-link-inline" onClick={() => void openExternalUrl(OPENAI_TUNNEL_DOCS_URL)}>
+            {c.docs}
+            <ExternalLink size={12} />
+          </button>
+        </p>
+      </div>
       <label>
         <span className="field-label">{c.approval}</span>
         <select className="select" value={approval} onChange={(event) => setApproval(event.target.value as ApprovalMode)}>

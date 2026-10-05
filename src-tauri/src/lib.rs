@@ -5,7 +5,7 @@ use commands::agent_commands::{
     agent_stop, video_work_dir,
 };
 use commands::asset_commands::fetch_assets;
-use commands::chatgpt_commands::{chatgpt_get_config, chatgpt_save_config, chatgpt_start, chatgpt_status, chatgpt_stop};
+use commands::chatgpt_commands::{chatgpt_get_config, chatgpt_save_config, chatgpt_start, chatgpt_status, chatgpt_stop, open_external_url};
 use commands::cutter_commands::{allow_media_preview, export_cut, transcribe_video};
 use commands::ffmpeg_commands::combine_audio_video;
 use commands::render_commands::{render_video, save_scenes_json};
@@ -50,6 +50,7 @@ pub fn run() {
             chatgpt_status,
             chatgpt_start,
             chatgpt_stop,
+            open_external_url,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

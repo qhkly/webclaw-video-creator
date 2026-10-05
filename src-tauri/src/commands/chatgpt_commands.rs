@@ -274,6 +274,47 @@ fn apply_input(config: &mut ChatgptConfig, input: ChatgptConfigInput) -> Result<
     Ok(config.clone())
 }
 
+/// Hosts the ChatGPT card may open in the system browser (credential consoles and docs only).
+const EXTERNAL_URL_HOSTS: [&str; 2] = ["platform.openai.com", "developers.openai.com"];
+
+/// Open an OpenAI console/docs page in the default browser. Anything outside the
+/// allowlist is refused, so the WebView cannot use this to launch arbitrary URLs.
+#[tauri::command]
+pub async fn open_external_url(url: String) -> Result<(), String> {
+    if !allowed_external_url(&url) {
+        return Err("不允许打开该链接".to_string());
+    }
+    let mut command = if cfg!(target_os = "macos") {
+        let mut command = std::process::Command::new("open");
+        command.arg(&url);
+        command
+    } else if cfg!(windows) {
+        // No shell parsing involved (cmd /c start would treat & specially).
+        let mut command = std::process::Command::new("rundll32");
+        command.arg("url.dll,FileProtocolHandler").arg(&url);
+        command
+    } else {
+        let mut command = std::process::Command::new("xdg-open");
+        command.arg(&url);
+        command
+    };
+    command
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .map(|_| ())
+        .map_err(|error| format!("无法打开浏览器: {error}"))
+}
+
+pub fn allowed_external_url(url: &str) -> bool {
+    let Some(rest) = url.strip_prefix("https://") else {
+        return false;
+    };
+    let host = rest.split(['/', '?', '#']).next().unwrap_or_default();
+    !url.chars().any(|c| c.is_whitespace() || c.is_control()) && EXTERNAL_URL_HOSTS.contains(&host)
+}
+
 pub fn valid_tunnel_id(value: &str) -> bool {
     value
         .strip_prefix("tunnel_")
@@ -355,6 +396,19 @@ mod tests {
             auto_start: true,
             approval: "weird".to_string(),
         }
+    }
+
+    #[test]
+    fn external_urls_are_limited_to_openai_consoles_and_docs() {
+        assert!(allowed_external_url("https://platform.openai.com/settings/organization/tunnels"));
+        assert!(allowed_external_url("https://platform.openai.com/api-keys"));
+        assert!(allowed_external_url("https://developers.openai.com/api/docs/guides/secure-mcp-tunnels"));
+        assert!(!allowed_external_url("http://platform.openai.com/api-keys"));
+        assert!(!allowed_external_url("https://platform.openai.com.evil.example/x"));
+        assert!(!allowed_external_url("https://user@platform.openai.com/x"));
+        assert!(!allowed_external_url("https://evil.example/?platform.openai.com"));
+        assert!(!allowed_external_url("file:///etc/passwd"));
+        assert!(!allowed_external_url("https://platform.openai.com/a b"));
     }
 
     #[test]
