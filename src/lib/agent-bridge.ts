@@ -80,14 +80,27 @@ export interface ChatgptStatus {
   port: number;
   mcpUrl: string;
   status: null | {
-    state: 'starting' | 'running' | 'mcp_only' | 'error' | 'stopped';
+    state: 'starting' | 'running' | 'awaiting_chatgpt' | 'workspace_access_missing' | 'mcp_only' | 'error' | 'stopped';
     toolCount: number;
     requestCount: number;
     lastRequestAt: string | null;
     lastTool: string | null;
     error: string | null;
     mcp: { port: number | null; url: string | null };
-    tunnel: { state: string; tunnelId: string; source: string | null; error: string | null };
+    /** Workspace association of the tunnel, as counts only — ids never reach the UI. */
+    tunnel: {
+      state: string;
+      tunnelId: string;
+      source: string | null;
+      error: string | null;
+      workspaceAccess: 'associated' | 'missing' | 'unknown' | null;
+      workspaceCount: number | null;
+      organizationCount: number | null;
+      workspaceAccessDetail: string | null;
+      workspaceCheckedAt: string | null;
+    };
+    /** Has ChatGPT actually reached this server through the tunnel. */
+    chatgpt: { seen: boolean; lastMethod: string | null; lastAt: string | null };
   };
   lastError: string | null;
   config: ChatgptConfigView;

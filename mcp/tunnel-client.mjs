@@ -219,7 +219,9 @@ export function buildRunArgs({ mcpUrl, authorizationFile, healthUrlFile, logFile
 }
 
 export function buildProbeArgs(tunnelId) {
-  return ['admin', 'tunnels', 'get', tunnelId];
+  // --json so the same probe doubles as the workspace-association check
+  // (tunnel-workspace.mjs parses organization_ids / workspace_ids from it).
+  return ['admin', '--json', 'tunnels', 'get', tunnelId];
 }
 
 /** Map control-plane probe output to an actionable message (network vs. credentials vs. tunnel). */

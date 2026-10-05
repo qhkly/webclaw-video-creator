@@ -7,7 +7,8 @@ import { tmpdir } from 'node:os';
 import { delimiter, join } from 'node:path';
 import { test } from 'node:test';
 import { APP_ROOT } from '../mcp/context.mjs';
-import { CHATGPT_RUN_ID, loadOrCreateToken, startBridge } from '../mcp/chatgpt-bridge.mjs';
+import { CHATGPT_RUN_ID, deriveState, loadOrCreateToken, startBridge } from '../mcp/chatgpt-bridge.mjs';
+import { WORKSPACE_ACCESS, parseTunnelMetadata, workspaceAccessFromMetadata } from '../mcp/tunnel-workspace.mjs';
 import {
   DEFAULT_CONFIG,
   loadConfig,
@@ -26,6 +27,7 @@ import {
   BIN_OVERRIDE_ENV,
   TUNNEL_CLIENT_VERSION,
   assetFor,
+  buildProbeArgs,
   buildRunArgs,
   checkCandidate,
   resolveTunnelClient,
@@ -278,6 +280,76 @@ test('tunnel-client invocation keeps secrets out of argv and drops broader OpenA
   assert.equal(parseLoopbackHealthUrl('http://127.0.0.1:5555/x'), null);
   assert.match(controlPlaneErrorMessage('401 invalid_api_key'), /API Key/);
   assert.match(controlPlaneErrorMessage('dial tcp: i/o timeout'), /网络/);
+  // The probe doubles as the workspace-association check: it must ask for JSON.
+  assert.deepEqual(buildProbeArgs(TUNNEL_ID), ['admin', '--json', 'tunnels', 'get', TUNNEL_ID]);
+});
+
+test('workspace association: metadata parsing folds to counts, never ids', () => {
+  // Shape from `tunnel-client admin --json tunnels get` on a tunnel with only an organization.
+  const orgOnly = JSON.stringify({
+    id: TUNNEL_ID,
+    name: 'video',
+    creator: 'user-XXXX',
+    organization_ids: ['org-1111222233334444'],
+    request_id: 'req_123',
+  });
+  const metadata = parseTunnelMetadata(orgOnly);
+  assert.deepEqual(metadata, { organizationCount: 1, workspaceCount: 0 });
+  assert.equal(workspaceAccessFromMetadata(metadata), WORKSPACE_ACCESS.MISSING);
+  // Counts only: the org id must not survive parsing.
+  assert.ok(!JSON.stringify(metadata).includes('org-1111222233334444'));
+
+  const associated = parseTunnelMetadata(
+    JSON.stringify({ id: TUNNEL_ID, organization_ids: ['org-1111222233334444'], workspace_ids: ['11111111-2222-3333-4444-555555555555'] }),
+  );
+  assert.deepEqual(associated, { organizationCount: 1, workspaceCount: 1 });
+  assert.equal(workspaceAccessFromMetadata(associated), WORKSPACE_ACCESS.ASSOCIATED);
+  assert.ok(!JSON.stringify(associated).includes('11111111-2222-3333'));
+
+  // Noise around the JSON object (warnings/log lines) is tolerated.
+  assert.equal(workspaceAccessFromMetadata(parseTunnelMetadata(`warn: something\n${orgOnly}\n`)), WORKSPACE_ACCESS.MISSING);
+  // An empty workspace list is "missing", not "unknown".
+  assert.equal(workspaceAccessFromMetadata(parseTunnelMetadata(JSON.stringify({ id: TUNNEL_ID, workspace_ids: [] }))), WORKSPACE_ACCESS.MISSING);
+
+  // A failed read is its own state, distinct from "no workspace".
+  for (const bad of ['401 invalid_api_key', '{"error":{"message":"forbidden"}}', 'not json at all', '', null]) {
+    assert.equal(parseTunnelMetadata(bad), null, JSON.stringify(bad));
+    assert.equal(workspaceAccessFromMetadata(parseTunnelMetadata(bad)), WORKSPACE_ACCESS.UNKNOWN);
+  }
+  assert.equal(workspaceAccessFromMetadata(null), WORKSPACE_ACCESS.UNKNOWN);
+});
+
+test('deriveState: local green must not mask ChatGPT-side truth', () => {
+  const base = {
+    stoppedAt: null,
+    error: null,
+    mcp: { port: 32159, url: 'http://127.0.0.1:32159/mcp' },
+    tunnel: { state: 'running', workspaceAccess: WORKSPACE_ACCESS.ASSOCIATED },
+    chatgpt: { seen: false, lastMethod: null, lastAt: null },
+  };
+  // Tunnel running, workspace associated, but ChatGPT never came through: NOT "connected".
+  assert.equal(deriveState(base), 'awaiting_chatgpt');
+  // First real delivered request flips it.
+  assert.equal(deriveState({ ...base, chatgpt: { seen: true, lastMethod: 'tools/list', lastAt: 'now' } }), 'running');
+
+  // No workspace association: its own actionable state, even though tunnel-client is green.
+  const missing = { ...base, tunnel: { ...base.tunnel, workspaceAccess: WORKSPACE_ACCESS.MISSING } };
+  assert.equal(deriveState(missing), 'workspace_access_missing');
+  // ...even if something did get through before the association was dropped.
+  assert.equal(deriveState({ ...missing, chatgpt: { seen: true, lastMethod: 'tools/list', lastAt: 'now' } }), 'workspace_access_missing');
+
+  // Metadata unreadable is NOT the same as missing: fall back to the delivery signal.
+  const unknown = { ...base, tunnel: { ...base.tunnel, workspaceAccess: WORKSPACE_ACCESS.UNKNOWN } };
+  assert.equal(deriveState(unknown), 'awaiting_chatgpt');
+  assert.equal(deriveState({ ...unknown, chatgpt: { seen: true, lastMethod: 'server/discover', lastAt: 'now' } }), 'running');
+  // Not checked yet behaves the same as unknown.
+  assert.equal(deriveState({ ...base, tunnel: { state: 'running', workspaceAccess: null } }), 'awaiting_chatgpt');
+
+  // Basics stay intact.
+  assert.equal(deriveState({ ...base, mcp: { port: null, url: null } }), 'starting');
+  assert.equal(deriveState({ ...base, error: 'boom' }), 'error');
+  assert.equal(deriveState({ ...base, stoppedAt: 'now' }), 'stopped');
+  assert.equal(deriveState({ ...base, tunnel: { state: 'stopped', workspaceAccess: null } }), 'mcp_only');
 });
 
 test('tunnel-client candidates: override, own cache, AI Studio cache (read-only), PATH', () => {

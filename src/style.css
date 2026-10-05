@@ -631,6 +631,13 @@ label {
   color: var(--accent-deep);
 }
 
+/* ChatGPT tunnel: healthy but unverified by real traffic (distinct from warn/error). */
+.pill-awaiting {
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  color: var(--accent-deep);
+}
+
 .field-label,
 label > span {
   display: flex;
@@ -2173,6 +2180,44 @@ input[type="range"] {
   color: var(--danger);
   font-size: 12px;
   overflow-wrap: anywhere;
+}
+
+/* Diagnostics rows in the ChatGPT card: green/amber/red per layer. */
+.chatgpt-diag-ok {
+  color: var(--accent-deep);
+  font-weight: 800;
+}
+
+.chatgpt-diag-warn {
+  color: #92400e;
+  font-weight: 800;
+}
+
+.chatgpt-diag-err {
+  color: var(--danger);
+  font-weight: 800;
+}
+
+/* Tunnel not associated with a ChatGPT workspace: actionable, red-leaning banner. */
+.chatgpt-ws-banner {
+  display: grid;
+  gap: 6px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--danger) 30%, transparent);
+  background: color-mix(in srgb, var(--danger) 8%, transparent);
+  font-size: 12px;
+}
+
+.chatgpt-ws-banner p {
+  margin: 0;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.chatgpt-ws-title {
+  color: var(--danger);
+  font-weight: 800;
 }
 
 .chatgpt-approvals {

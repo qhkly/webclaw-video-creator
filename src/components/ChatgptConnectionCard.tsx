@@ -83,8 +83,29 @@ export default function ChatgptConnectionCard() {
   const running = info?.running ?? false;
   const state = running ? info?.status?.state ?? 'starting' : 'stopped';
   const tunnel = info?.status?.tunnel;
+  const chatgptActivity = info?.status?.chatgpt;
   const error = (running ? info?.status?.error ?? tunnel?.error : info?.lastError) ?? null;
   const config = info?.config;
+  const workspaceMissing = state === 'workspace_access_missing' || tunnel?.workspaceAccess === 'missing';
+
+  const pillClass =
+    state === 'running'
+      ? 'pill-accent'
+      : state === 'error' || state === 'workspace_access_missing'
+        ? 'pill-warn'
+        : state === 'awaiting_chatgpt'
+          ? 'pill-awaiting'
+          : 'pill-muted';
+
+  const workspaceFact = !running
+    ? null
+    : tunnel?.workspaceAccess == null
+      ? { text: c.workspaceNotChecked, tone: 'dim' }
+      : tunnel.workspaceAccess === 'associated'
+        ? { text: `${c.workspaceAssociated}（${tunnel.workspaceCount} ${c.workspaceAssociatedCount}）`, tone: 'ok' }
+        : tunnel.workspaceAccess === 'missing'
+          ? { text: c.workspaceMissing, tone: 'err' }
+          : { text: c.workspaceUnknown, tone: 'warn' };
 
   return (
     <div className="card settings-card chatgpt-card">
@@ -95,7 +116,7 @@ export default function ChatgptConnectionCard() {
       <p className="settings-hint">{c.desc}</p>
 
       <div className="chatgpt-status">
-        <span className={`pill ${state === 'running' ? 'pill-accent' : state === 'error' ? 'pill-warn' : 'pill-muted'}`}>
+        <span className={`pill ${pillClass}`}>
           {state === 'starting' && <Loader2 size={12} className="spin" />}
           {c.states[state] ?? state}
         </span>
@@ -105,6 +126,50 @@ export default function ChatgptConnectionCard() {
           </span>
         )}
       </div>
+
+      {running && info?.status && (
+        <dl className="chatgpt-facts">
+          <dt>{c.diagMcp}</dt>
+          <dd className={info.status.mcp.port ? 'chatgpt-diag-ok' : 'chatgpt-diag-err'}>
+            {info.status.mcp.port ? `127.0.0.1:${info.status.mcp.port}` : '—'}
+          </dd>
+          <dt>{c.diagTunnel}</dt>
+          <dd className={tunnel?.state === 'running' ? 'chatgpt-diag-ok' : tunnel?.state === 'error' ? 'chatgpt-diag-err' : 'chatgpt-diag-warn'}>
+            {tunnel ? c.tunnelStates[tunnel.state] ?? tunnel.state : '—'}
+          </dd>
+          <dt>{c.diagWorkspace}</dt>
+          <dd
+            className={
+              workspaceFact?.tone === 'ok'
+                ? 'chatgpt-diag-ok'
+                : workspaceFact?.tone === 'err'
+                  ? 'chatgpt-diag-err'
+                  : workspaceFact?.tone === 'warn'
+                    ? 'chatgpt-diag-warn'
+                    : undefined
+            }
+          >
+            {workspaceFact?.text ?? '—'}
+          </dd>
+          <dt>{c.diagChatgpt}</dt>
+          <dd className={chatgptActivity?.seen ? 'chatgpt-diag-ok' : 'chatgpt-diag-warn'}>
+            {chatgptActivity?.seen
+              ? `${c.chatgptSeen}${chatgptActivity.lastMethod ? `（${chatgptActivity.lastMethod}）` : ''}`
+              : c.chatgptAwaiting}
+          </dd>
+        </dl>
+      )}
+
+      {workspaceMissing && running && (
+        <div className="chatgpt-ws-banner">
+          <span className="chatgpt-ws-title">{c.wsBannerTitle}</span>
+          <p>{c.wsBannerSteps}</p>
+          <button type="button" className="chatgpt-link" onClick={() => void openExternalUrl(OPENAI_TUNNEL_CONSOLE_URL)}>
+            {c.wsBannerAction}
+            <ExternalLink size={12} />
+          </button>
+        </div>
+      )}
       <dl className="chatgpt-facts">
         <dt>{c.localPort}</dt>
         <dd>

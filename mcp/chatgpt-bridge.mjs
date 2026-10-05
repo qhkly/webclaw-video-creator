@@ -37,11 +37,14 @@ import {
   runCapture,
   tunnelEnv,
 } from './tunnel-client.mjs';
+import { WORKSPACE_ACCESS, parseTunnelMetadata, workspaceAccessFromMetadata } from './tunnel-workspace.mjs';
 
 /** Approvals from remote calls land where the UI already looks (agent_pending_approvals with run id "chatgpt"). */
 export const CHATGPT_RUN_ID = 'chatgpt';
 const STARTUP_BUDGET_MS = 60_000;
 const PROBE_TIMEOUT_MS = 20_000;
+/** While ChatGPT cannot reach the tunnel (workspace association missing), re-read tunnel metadata this often. */
+const WORKSPACE_RECHECK_MS = 30_000;
 
 export function defaultStateDir(env = process.env) {
   return env.VIDEO_CREATOR_CHATGPT_DIR || join(homedir(), '.webclaw-video-creator', 'chatgpt');
@@ -98,7 +101,22 @@ export async function startBridge({
     toolCount: tools.length,
     approval: { mode: approval.mode, runId: CHATGPT_RUN_ID },
     mcp: { port: null, url: null },
-    tunnel: { state: 'stopped', tunnelId: config.tunnelId, source: null, error: null },
+    // workspaceAccess counts only — ids never reach status.json (tunnel-workspace.mjs drops them).
+    tunnel: {
+      state: 'stopped',
+      tunnelId: config.tunnelId,
+      source: null,
+      error: null,
+      workspaceAccess: null,
+      workspaceCount: null,
+      organizationCount: null,
+      workspaceAccessDetail: null,
+      workspaceCheckedAt: null,
+    },
+    // Has ChatGPT actually reached this server through the tunnel? The Bearer token
+    // is only ever handed to tunnel-client, so an authenticated MCP request is a
+    // delivered request. Local health/readyz probes never touch /mcp.
+    chatgpt: { seen: false, lastMethod: null, lastAt: null },
     requestCount: 0,
     lastRequestAt: null,
     lastTool: null,
@@ -125,9 +143,16 @@ export async function startBridge({
       token,
       port,
       log: say,
-      onRequest: ({ tool }) => {
+      onRequest: ({ method, tool }) => {
         status.requestCount += 1;
         status.lastRequestAt = new Date().toISOString();
+        // Any real MCP method delivered through the tunnel proves the ChatGPT leg;
+        // "running" alone must never be displayed as "ChatGPT connected".
+        if (typeof method === 'string' && method !== '') {
+          status.chatgpt.seen = true;
+          status.chatgpt.lastMethod = method;
+          status.chatgpt.lastAt = status.lastRequestAt;
+        }
         if (tool) {
           status.lastTool = tool;
           say(`tools/call ${tool}`);
@@ -147,6 +172,7 @@ export async function startBridge({
   const runtimeDir = join(stateDir, 'runtime');
   let child = null;
   let stopping = false;
+  let workspaceTimer = null;
 
   if (!tunnel) {
     status.tunnel.state = 'disabled';
@@ -193,6 +219,13 @@ export async function startBridge({
       throw new Error(`${controlPlaneErrorMessage(probe.output)}${detail ? `（${detail}）` : ''}`);
     }
 
+    // Read-only workspace association check from the same probe output. A tunnel
+    // with only a Platform organization runs green locally while ChatGPT rejects
+    // it — surface that as its own state instead of letting "running" hide it.
+    recordWorkspaceAccess(probe.output);
+    startWorkspaceRecheck(binary.path, childEnv);
+    await flushStatus();
+
     const authorizationFile = join(runtimeDir, 'authorization');
     await writePrivate(authorizationFile, `Bearer ${token}`);
     const healthUrlFile = join(runtimeDir, 'health-url');
@@ -237,6 +270,54 @@ export async function startBridge({
     throw new Error('隧道在 60 秒内没有就绪，请检查网络/代理与 Tunnel 配置 / tunnel not ready within 60s');
   }
 
+  /** Fold probe output into the status fields. Counts only; ids are dropped in tunnel-workspace.mjs. */
+  function recordWorkspaceAccess(probeOutput) {
+    const metadata = parseTunnelMetadata(probeOutput);
+    status.tunnel.workspaceAccess = workspaceAccessFromMetadata(metadata);
+    status.tunnel.workspaceCount = metadata ? metadata.workspaceCount : null;
+    status.tunnel.organizationCount = metadata ? metadata.organizationCount : null;
+    status.tunnel.workspaceCheckedAt = new Date().toISOString();
+    status.tunnel.workspaceAccessDetail =
+      status.tunnel.workspaceAccess === WORKSPACE_ACCESS.MISSING
+        ? 'Tunnel 尚未授权给任何 ChatGPT 工作空间：请在 OpenAI Tunnel 设置中打开这条 tunnel，添加当前 ChatGPT workspace 后回来重试 / The tunnel is not associated with any ChatGPT workspace: open it in the OpenAI tunnel settings, add your ChatGPT workspace, then retry here'
+        : status.tunnel.workspaceAccess === WORKSPACE_ACCESS.UNKNOWN
+          ? '无法读取 Tunnel 的 workspace 关联（不影响隧道运行，仅无法判断 ChatGPT 访问权限）/ Could not read the tunnel workspace association'
+          : null;
+    return status.tunnel.workspaceAccess;
+  }
+
+  /**
+   * While ChatGPT cannot get in, keep re-reading tunnel metadata so the user can
+   * fix the association on the platform and watch this state flip without a
+   * restart. Read-only, uses the same restricted key, stops itself once access
+   * is confirmed or the tunnel is gone.
+   */
+  function startWorkspaceRecheck(binaryPath, childEnv) {
+    clearInterval(workspaceTimer);
+    workspaceTimer = setInterval(() => {
+      if (stopping || status.tunnel.state === 'error' || !child) {
+        clearInterval(workspaceTimer);
+        workspaceTimer = null;
+        return;
+      }
+      if (status.tunnel.workspaceAccess !== WORKSPACE_ACCESS.MISSING) {
+        return;
+      }
+      void (async () => {
+        const probe = await runCapture(binaryPath, buildProbeArgs(config.tunnelId), { env: childEnv, timeoutMs: PROBE_TIMEOUT_MS });
+        if (stopping || probe.code !== 0) {
+          return;
+        }
+        if (recordWorkspaceAccess(probe.output) !== WORKSPACE_ACCESS.MISSING) {
+          clearInterval(workspaceTimer);
+          workspaceTimer = null;
+          say('tunnel workspace access is now associated');
+        }
+        await flushStatus();
+      })();
+    }, WORKSPACE_RECHECK_MS);
+  }
+
   async function killChild() {
     const running = child;
     if (!running) {
@@ -254,6 +335,8 @@ export async function startBridge({
       return;
     }
     stopping = true;
+    clearInterval(workspaceTimer);
+    workspaceTimer = null;
     await killChild();
     await http.close();
     await rm(runtimeDir, { recursive: true, force: true });
@@ -267,7 +350,16 @@ export async function startBridge({
   return { port: http.port, url: http.url, token, status, stop, approval };
 }
 
-function deriveState(status) {
+/**
+ * Fold the raw status into the UI state. Exported for tests.
+ *
+ * The ordering encodes the diagnostics contract: a locally-green tunnel must not
+ * mask a ChatGPT-side problem. "running" is reserved for a tunnel that ChatGPT
+ * has actually reached; before that it is awaiting_chatgpt, and if the tunnel is
+ * not associated with any ChatGPT workspace it is workspace_access_missing —
+ * an actionable configuration failure on the OpenAI platform, not an error here.
+ */
+export function deriveState(status) {
   if (status.stoppedAt) {
     return 'stopped';
   }
@@ -279,7 +371,10 @@ function deriveState(status) {
   }
   switch (status.tunnel.state) {
     case 'running':
-      return 'running';
+      if (status.tunnel.workspaceAccess === WORKSPACE_ACCESS.MISSING) {
+        return 'workspace_access_missing';
+      }
+      return status.chatgpt?.seen ? 'running' : 'awaiting_chatgpt';
     case 'starting':
       return 'starting';
     case 'error':
