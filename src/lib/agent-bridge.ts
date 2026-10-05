@@ -1,6 +1,7 @@
 import { convertFileSrc, invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import type { VideoScene } from '../types';
+import { isAllowedOpenAiExternalUrl } from './external-links';
 import type { AgentCliId } from './agent-events';
 
 export type AgentCliChoice = 'auto' | AgentCliId;
@@ -102,17 +103,24 @@ export const chatgptStart = () => invoke<void>('chatgpt_start');
 
 export const chatgptStop = () => invoke<void>('chatgpt_stop');
 
-// Both credentials can only be created on the OpenAI platform; the card links straight to the right pages.
-export const OPENAI_TUNNEL_CONSOLE_URL = 'https://platform.openai.com/settings/organization/tunnels';
-export const OPENAI_API_KEY_CONSOLE_URL = 'https://platform.openai.com/api-keys';
-export const OPENAI_TUNNEL_DOCS_URL = 'https://developers.openai.com/api/docs/guides/secure-mcp-tunnels';
+export { OPENAI_API_KEY_CONSOLE_URL, OPENAI_TUNNEL_CONSOLE_URL, OPENAI_TUNNEL_DOCS_URL } from './external-links';
 
-/** System browser via the app's own allowlisted command; window.open as a last resort (e.g. plain `vite` dev). */
-export const openExternalUrl = (url: string) =>
-  invoke<void>('open_external_url', { url }).catch(() => {
+/**
+ * System browser via the app's own allowlisted command; window.open only as a fallback
+ * (e.g. plain `vite` dev). Both paths require an exact allowlisted URL, so a Rust-side
+ * refusal can never be bypassed by the fallback.
+ */
+export const openExternalUrl = async (url: string) => {
+  if (!isAllowedOpenAiExternalUrl(url)) {
+    throw new Error(`refusing to open non-allowlisted URL: ${url}`);
+  }
+  try {
+    await invoke<void>('open_external_url', { url });
+  } catch {
     try {
       window.open(url, '_blank', 'noopener');
     } catch {
       // nothing else to try
     }
-  });
+  }
+};
