@@ -1,4 +1,5 @@
 import { AbsoluteFill, Img, interpolate } from 'remotion';
+import { mediaSrc } from '../media';
 import { useScale } from '../useScale';
 
 interface Props {
@@ -11,7 +12,7 @@ interface Props {
 
 export default function ImageFrame({ imageSrc, caption, subtitle, fallbackTitle, frame }: Props) {
   const opacity = interpolate(frame, [0, 24], [0, 1], { extrapolateRight: 'clamp' });
-  const src = String(imageSrc || '');
+  const src = mediaSrc(String(imageSrc || ''));
   const scale = useScale();
 
   return (

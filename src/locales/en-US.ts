@@ -119,6 +119,7 @@ const enUS: typeof zhCN = {
       video_media_probe: 'Analyze media',
       video_scenes_save: 'Save storyboard',
       video_tts_synthesize: 'Generate voice-over',
+      video_image_generate: 'Generate image',
       video_render: 'Render video',
       video_audio_mux: 'Mix audio',
       shell: 'Read-only command',

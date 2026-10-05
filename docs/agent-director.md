@@ -48,6 +48,7 @@
 | `video_media_probe` | `ffmpeg -i` 解析（与 Cutter 的 `probeMedia` 一致） | 只读，确定性 |
 | `video_scenes_save` | 校验并写 `scenes.json`（等价 Tauri `save_scenes_json`，外加校验） | 本地写，确定性 |
 | `video_tts_synthesize` | `scripts/tts.mjs`（edge / f5 克隆声音） | 本地写，调用 Provider |
+| `video_image_generate` | `openai-oauth-image`：本机 Codex OAuth 登录态 + `@openai-oauth/ai-sdk` 调 `gpt-image-2`，ffmpeg 统一裁成 1920x1080 / 1080x1920 / 1080x1080 PNG 写入 `assets/` | 付费（消耗账户额度），始终需审批 |
 | `video_render` | `scripts/render.mjs`（Remotion），支持 `notifications/progress` | 本地写，确定性 |
 | `video_audio_mux` | FFmpeg 混音（Tauri `combine_audio_video` 的改进版：保留原音轨和视频时长） | 本地写，确定性 |
 
@@ -62,7 +63,7 @@ Agent 能看到的描述包括：`initialize.instructions`（导演工作方式�
 | 字幕 | `video_captions_export`（words.json → SRT/ASS） | 纯本地 |
 | 素材 | `video_assets_search`（Pexels）、`video_assets_import`（用户素材/录屏入库） | 现有 `fetch-assets.mjs` |
 | 预览 | `video_preview_frames`（抽帧给 Agent 视觉自检） | FFmpeg |
-| 图片/视频生成 | `video_image_generate` / `video_clip_generate` | 付费 Provider 适配器，按需配置 key |
+| 视频生成 | `video_clip_generate` | 付费 Provider 适配器，按需配置 key |
 | 长任务 | `video_job_start/status/cancel` | 渲染超过客户端超时后改为 job 模型 |
 
 ## Brand DNA（个人 IP 配置）

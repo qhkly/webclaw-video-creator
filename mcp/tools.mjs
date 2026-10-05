@@ -5,6 +5,7 @@ import { readdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { basename, join, resolve } from 'node:path';
 import { listBrandProfiles, loadBrandProfile } from './brand.mjs';
 import { exists, findFfmpeg, isProjectId, lastJsonLine, run, runScript, scriptError, ToolError } from './context.mjs';
+import { extensionFor, generateWithOpenAIOAuth, IMAGE_ASPECTS, normalizeImage } from './image-gen.mjs';
 import { getProvider, listProviders, providerIds } from './providers.mjs';
 import { SCENE_TEMPLATES, validateScenes } from './scenes.mjs';
 
@@ -65,7 +66,7 @@ export const tools = [
     name: 'video_providers_list',
     title: 'List media providers',
     description:
-      'List pluggable media providers (tts, compose, render, stock) with billing (free/local/paid), availability and planned capability slots. ' +
+      'List pluggable media providers (tts, image-gen, compose, render, stock) with billing (free/local/paid), availability and planned capability slots. ' +
       'Providers only generate media; planning and writing stay with you.',
     inputSchema: { type: 'object', properties: {}, additionalProperties: false },
     annotations: READ_ONLY,
@@ -196,6 +197,92 @@ export const tools = [
         wordsPath: tts.wordsPath,
         wordCount: tts.words?.length ?? 0,
         attachedToScene: scene ? sceneId : null,
+      };
+    },
+  },
+  {
+    name: 'video_image_generate',
+    // Spends the user's ChatGPT image quota, so it always goes through approval.
+    cost: 'paid',
+    title: 'Generate image',
+    description:
+      'Generate one still image (GPT Image via the local Codex/ChatGPT OAuth login, provider openai-oauth-image; no API key, uses account quota) ' +
+      'and save it as a PNG in <workspace>/projects/<project>/assets/. The model may return a different size than requested, so the result is ' +
+      'cover-cropped to a fixed canvas per aspect (16:9 1920x1080, 9:16 1080x1920, 1:1 1080x1080); the untouched original is kept in assets/_source/. ' +
+      'If sceneId is given, an ImageFrame scene gets props.imageSrc set, any other scene gets it as a cover background image. Returns path, width, height, mimeType.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        project: PROJECT_ARG,
+        prompt: { type: 'string', description: 'What the image should show (subject, style, composition). No text overlays; captions are rendered by the templates.' },
+        filename: { type: 'string', description: 'Base file name, e.g. "hero"; saved as <filename>.png (a numeric suffix is added instead of overwriting). Default image-<timestamp>.' },
+        aspect: { type: 'string', enum: Object.keys(IMAGE_ASPECTS), description: 'Default: brand visual.aspect.' },
+        sceneId: { type: 'string', description: 'Attach the image to this scene in scenes.json.' },
+      },
+      required: ['project', 'prompt'],
+      additionalProperties: false,
+    },
+    annotations: { ...LOCAL_WRITE, idempotentHint: false, openWorldHint: true },
+    async handler({ project, prompt, filename, aspect, sceneId }, { ctx, progress }) {
+      if (!prompt.trim()) {
+        throw new ToolError('prompt must not be empty');
+      }
+      const { profile: brand } = await loadBrandProfile(ctx, 'default');
+      const ratio = aspect || (IMAGE_ASPECTS[brand.visual.aspect] ? brand.visual.aspect : '16:9');
+      const target = IMAGE_ASPECTS[ratio];
+      const dir = ctx.projectDir(project);
+      const scenesPath = join(dir, 'scenes.json');
+      if (sceneId && !(await readScenes(scenesPath)).some((item) => item.id === sceneId)) {
+        throw new ToolError(`scene ${sceneId} not found in ${scenesPath}`);
+      }
+      const generate = ctx.generateImage ?? generateWithOpenAIOAuth;
+      if (!ctx.generateImage) {
+        const check = await getProvider('openai-oauth-image', 'image-gen').check(ctx);
+        if (!check.available) {
+          throw new ToolError(`image provider openai-oauth-image unavailable: ${check.reason}`);
+        }
+      }
+      const assetsDir = await ctx.ensureDir(join(dir, 'assets'));
+      const sourceDir = await ctx.ensureDir(join(assetsDir, '_source'));
+      const base = await freeName(assetsDir, safeName(filename || `image-${Date.now()}`).replace(/\.(png|jpe?g|webp)$/i, ''));
+      progress(10, `generating ${target.request} image`);
+      let image;
+      try {
+        image = await generate({ prompt, size: target.request });
+      } catch (error) {
+        throw new ToolError(`image generation failed: ${error.message}`);
+      }
+      const sourcePath = join(sourceDir, `${base}.${extensionFor(image.mediaType)}`);
+      await writeFile(sourcePath, image.bytes);
+      progress(80, 'normalizing size');
+      const ffmpeg = await findFfmpeg();
+      const source = await probeMedia(ffmpeg, sourcePath);
+      const path = join(assetsDir, `${base}.png`);
+      const size = await normalizeImage(ffmpeg, sourcePath, path, target);
+      if (sceneId) {
+        await withFileLock(scenesPath, async () => {
+          const latest = await readScenes(scenesPath);
+          const scene = latest.find((item) => item.id === sceneId);
+          if (!scene) {
+            throw new ToolError(`scene ${sceneId} was removed from ${scenesPath} during generation; image kept at ${path}`);
+          }
+          if (scene.template === 'ImageFrame') {
+            scene.props = { ...scene.props, imageSrc: path };
+          } else {
+            scene.background = { kind: 'image', assetPath: path, fit: 'cover' };
+          }
+          await writeFile(scenesPath, JSON.stringify(latest, null, 2));
+        });
+      }
+      return {
+        path,
+        width: size.width,
+        height: size.height,
+        mimeType: 'image/png',
+        aspect: ratio,
+        sourcePath,
+        source: { width: source.width, height: source.height, mimeType: image.mediaType },
+        attachedToScene: sceneId ?? null,
       };
     },
   },
@@ -404,6 +491,7 @@ async function describeProject(ctx, id, detailed) {
     }
   }
   info.audio = await listFiles(join(dir, 'audio'), /\.(mp3|wav|m4a)$/i);
+  info.images = await listFiles(join(dir, 'assets'), /\.(png|jpe?g|webp)$/i);
   info.renders = await listFiles(join(dir, 'renders'), /\.(mp4|mov|webm)$/i);
   return info;
 }
@@ -447,6 +535,15 @@ export function withFileLock(path, task) {
     }
   });
   return next;
+}
+
+/** `base`, or `base-2`, `base-3`… so a generated asset never overwrites an existing one. */
+async function freeName(dir, base) {
+  let name = base;
+  for (let n = 2; await exists(join(dir, `${name}.png`)); n += 1) {
+    name = `${base}-${n}`;
+  }
+  return name;
 }
 
 function safeName(name) {

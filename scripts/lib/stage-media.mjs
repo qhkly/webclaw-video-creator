@@ -44,6 +44,9 @@ export async function stageSceneMedia(scenes, publicDir) {
     if (scene.background?.assetPath) {
       next.background = { ...scene.background, assetPath: await stage(scene.background.assetPath) };
     }
+    if (scene.template === 'ImageFrame' && scene.props?.imageSrc) {
+      next.props = { ...scene.props, imageSrc: await stage(scene.props.imageSrc) };
+    }
     result.push(next);
   }
   return result;

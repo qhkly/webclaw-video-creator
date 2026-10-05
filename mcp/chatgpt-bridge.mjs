@@ -81,6 +81,7 @@ function summarizeActivity(tool, args = {}) {
   if (typeof args.provider === 'string') parts.push(`provider=${args.provider.slice(0, 32)}`);
   if (typeof args.resolution === 'string') parts.push(`resolution=${args.resolution.slice(0, 16)}`);
   if (typeof args.format === 'string') parts.push(`format=${args.format.slice(0, 16)}`);
+  if (typeof args.filename === 'string') parts.push(`image=${args.filename.slice(0, 64)}`);
   if (typeof args.path === 'string') parts.push(`file=${String(args.path).split(/[\\/]/).pop().slice(0, 80)}`);
   if (tool === 'video_scenes_save' && Array.isArray(args.scenes)) parts.push(`scenes=${args.scenes.length}`);
   return parts.join(' ');

@@ -117,6 +117,7 @@ const zhCN = {
       video_media_probe: '分析素材',
       video_scenes_save: '保存分镜',
       video_tts_synthesize: '生成配音',
+      video_image_generate: '生成图片',
       video_render: '渲染视频',
       video_audio_mux: '混合音频',
       shell: '只读命令',

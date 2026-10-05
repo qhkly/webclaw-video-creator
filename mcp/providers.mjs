@@ -2,8 +2,9 @@
 // agent (Claude Code / Codex, on the user's own plan) decides *what* to make;
 // providers only turn a request into a media file. No LLM provider lives here.
 //
-// billing: "free" (no account), "local" (runs on this machine), "paid" (metered API key).
+// billing: "free" (no account), "local" (runs on this machine), "paid" (metered API key or account quota).
 import { exists, findFfmpeg, run } from './context.mjs';
+import { checkOpenAIOAuthImage } from './image-gen.mjs';
 import { join } from 'node:path';
 
 const F5_URL = 'http://127.0.0.1:9880';
@@ -44,6 +45,14 @@ export const PROVIDERS = [
     check: async (ctx) => ({ available: await exists(join(ctx.appRoot, 'node_modules', '@remotion', 'renderer')) }),
   },
   {
+    id: 'openai-oauth-image',
+    kind: 'image-gen',
+    billing: 'paid',
+    description:
+      'GPT Image (gpt-image-2) through the local Codex/ChatGPT OAuth login (@openai-oauth/ai-sdk). No API key; each image spends the account\'s quota.',
+    check: async () => checkOpenAIOAuthImage(),
+  },
+  {
     id: 'pexels',
     kind: 'stock',
     billing: 'free',
@@ -55,7 +64,6 @@ export const PROVIDERS = [
 // Capability slots the director can plan around but that have no adapter yet.
 export const PLANNED_KINDS = [
   { kind: 'asr', note: 'Transcription adapters (openai-compatible / whisper-cpp / silence) arrive with the Cutter MVP merge.' },
-  { kind: 'image-gen', note: 'Paid image generation adapters (pluggable, API key per provider).' },
   { kind: 'video-gen', note: 'Paid video generation adapters (pluggable, API key per provider).' },
 ];
 

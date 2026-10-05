@@ -8,7 +8,7 @@ import { useVideoStore } from '../store/useVideoStore';
 import { useI18n } from '../i18n';
 import './agent.css';
 
-const REFRESH_TOOLS = new Set(['video_scenes_save', 'video_tts_synthesize', 'video_render', 'video_audio_mux']);
+const REFRESH_TOOLS = new Set(['video_scenes_save', 'video_tts_synthesize', 'video_image_generate', 'video_render', 'video_audio_mux']);
 
 export default function AgentPage() {
   const { t } = useI18n();

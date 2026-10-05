@@ -16,6 +16,7 @@ export const SERVER_INSTRUCTIONS = [
   'Start with video_project_status (workspace, projects, available providers) and video_brand_profile_get',
   '(creator voice, tone constraints, visual style, caption/music preferences, reusable assets) before writing scripts.',
   'Typical flow: write scenes -> video_scenes_save -> video_tts_synthesize per scene -> video_render -> video_audio_mux.',
+  'For visuals, video_image_generate (uses the user\'s ChatGPT image quota, needs approval) writes a PNG to the project assets and can attach it to a scene.',
   'Relative paths resolve inside the workspace; outputs are always written inside the workspace.',
 ].join(' ');
 

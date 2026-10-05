@@ -94,7 +94,12 @@ npm run remotion:preview
 
 Video capabilities are also exposed as atomic MCP tools so a coding agent (Claude Code, Codex, …) can direct the
 whole production itself: `video_project_status`, `video_brand_profile_get`, `video_providers_list`,
-`video_media_probe`, `video_scenes_save`, `video_tts_synthesize`, `video_render`, `video_audio_mux`.
+`video_media_probe`, `video_scenes_save`, `video_tts_synthesize`, `video_image_generate`, `video_render`, `video_audio_mux`.
+
+`video_image_generate` uses the `openai-oauth-image` provider: GPT Image (`gpt-image-2`) through the local Codex/ChatGPT
+login (`~/.codex/auth.json`, via `@openai-oauth/ai-sdk`), no API key. It spends the account's image quota, so it is
+classed `paid` and always asks for approval in the app. Output is cover-cropped to 1920x1080 / 1080x1920 / 1080x1080
+in `projects/<id>/assets/`; the model's original is kept in `assets/_source/`.
 
 ```bash
 npm run mcp     # stdio MCP server; workspace = $VIDEO_CREATOR_WORKSPACE or .video-work
