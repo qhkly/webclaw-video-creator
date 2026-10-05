@@ -20,6 +20,7 @@ export function generateTts(input: {
   voice: string;
   output: string;
   engine: VoiceEngine;
+  project?: string;
 }) {
   return invoke<TtsResult>('generate_tts', input);
 }

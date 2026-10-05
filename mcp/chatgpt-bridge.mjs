@@ -64,6 +64,28 @@ export function marksChatgptDelivery(method) {
   return method === 'server/discover' || method === 'tools/list' || method === 'tools/call';
 }
 
+function activityKey(id) {
+  return id === undefined || id === null ? `anon-${Date.now()}` : String(id).slice(0, 80);
+}
+
+function safeProject(value) {
+  const project = typeof value === 'string' ? value.trim() : '';
+  return /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(project) ? project : null;
+}
+
+function summarizeActivity(tool, args = {}) {
+  const parts = [];
+  const project = safeProject(args.project);
+  if (project) parts.push(`project=${project}`);
+  if (typeof args.sceneId === 'string') parts.push(`scene=${args.sceneId.slice(0, 64)}`);
+  if (typeof args.provider === 'string') parts.push(`provider=${args.provider.slice(0, 32)}`);
+  if (typeof args.resolution === 'string') parts.push(`resolution=${args.resolution.slice(0, 16)}`);
+  if (typeof args.format === 'string') parts.push(`format=${args.format.slice(0, 16)}`);
+  if (typeof args.path === 'string') parts.push(`file=${String(args.path).split(/[\\/]/).pop().slice(0, 80)}`);
+  if (tool === 'video_scenes_save' && Array.isArray(args.scenes)) parts.push(`scenes=${args.scenes.length}`);
+  return parts.join(' ');
+}
+
 export function defaultStateDir(env = process.env) {
   return env.VIDEO_CREATOR_CHATGPT_DIR || join(homedir(), '.webclaw-video-creator', 'chatgpt');
 }
@@ -138,6 +160,7 @@ export async function startBridge({
     requestCount: 0,
     lastRequestAt: null,
     lastTool: null,
+    recentActivity: [],
     error: null,
   };
   let statusTimer = null;
@@ -161,7 +184,7 @@ export async function startBridge({
       token,
       port,
       log: say,
-      onRequest: ({ method, tool }) => {
+      onRequest: ({ id, method, tool, arguments: args }) => {
         status.requestCount += 1;
         status.lastRequestAt = new Date().toISOString();
         // Only remote-verifiable methods prove the ChatGPT leg: tunnel-client's own
@@ -174,7 +197,43 @@ export async function startBridge({
         if (tool) {
           status.lastTool = tool;
           say(`tools/call ${tool}`);
+          const activityId = activityKey(id);
+          status.recentActivity = [
+            ...status.recentActivity.filter((item) => item.id !== activityId),
+            {
+              id: activityId,
+              tool,
+              project: safeProject(args?.project),
+              state: 'started',
+              startedAt: status.lastRequestAt,
+              finishedAt: null,
+              summary: summarizeActivity(tool, args),
+            },
+          ].slice(-60);
         }
+        touchStatus();
+      },
+      onResponse: ({ id, method, tool, arguments: args, response }) => {
+        if (method !== 'tools/call' || !tool) {
+          return;
+        }
+        const activityId = activityKey(id);
+        const finishedAt = new Date().toISOString();
+        const failed = Boolean(response?.error || response?.result?.isError);
+        const existing = status.recentActivity.find((item) => item.id === activityId);
+        const next = {
+          id: activityId,
+          tool,
+          project: safeProject(args?.project),
+          state: failed ? 'error' : 'done',
+          startedAt: existing?.startedAt ?? finishedAt,
+          finishedAt,
+          summary: existing?.summary ?? summarizeActivity(tool, args),
+        };
+        status.recentActivity = [
+          ...status.recentActivity.filter((item) => item.id !== activityId),
+          next,
+        ].slice(-60);
         touchStatus();
       },
     });

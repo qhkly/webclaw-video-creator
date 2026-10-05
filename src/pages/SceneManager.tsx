@@ -40,6 +40,7 @@ const TEMPLATE_ICONS = {
 
 export default function SceneManager() {
   const scenes = useVideoStore((state) => state.scenes);
+  const currentProjectId = useVideoStore((state) => state.currentProjectId);
   const aspect = useVideoStore((state) => state.aspect);
   const voice = useVideoStore((state) => state.voice);
   const engine = useVideoStore((state) => state.engine);
@@ -541,7 +542,7 @@ export default function SceneManager() {
               className="btn btn-soft btn-sm"
               onClick={async () => {
                 const output = `${selectedScene.id}.mp3`;
-                const result = await generateTts({ text: selectedScene.narration, voice, output, engine });
+                const result = await generateTts({ text: selectedScene.narration, voice, output, engine, project: currentProjectId ?? undefined });
                 updateScene(selectedScene.id, {
                   duration: Math.max(2, Math.ceil(result.duration)),
                   audio: { path: result.output, duration: result.duration, wordsPath: result.wordsPath },

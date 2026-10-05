@@ -44,6 +44,25 @@ export interface ProjectSnapshot {
   renders: Array<{ name: string; path: string; size: number; modifiedMs: number }>;
 }
 
+export interface ProjectSummary {
+  id: string;
+  modifiedMs: number;
+  sceneCount: number;
+  voicedCount: number;
+  totalDuration: number;
+  renderCount: number;
+}
+
+export interface ChatgptActivity {
+  id: string;
+  tool: string;
+  project: string | null;
+  state: 'started' | 'done' | 'error';
+  startedAt: string;
+  finishedAt: string | null;
+  summary: string;
+}
+
 export const detectAgentClis = () => invoke<AgentCliInfo[]>('agent_detect_clis');
 
 export const startAgent = (params: { task: string; cli: AgentCliChoice; model?: string; approval: ApprovalMode; project: string }) =>
@@ -57,6 +76,11 @@ export const decideApproval = (runId: string, approvalId: string, allow: boolean
   invoke<void>('agent_decide_approval', { runId, approvalId, allow, note });
 
 export const projectSnapshot = (project: string) => invoke<ProjectSnapshot>('agent_project_snapshot', { project });
+
+export const listProjects = () => invoke<ProjectSummary[]>('agent_list_projects');
+
+export const saveProjectScenes = (project: string, scenes: VideoScene[]) =>
+  invoke<{ project: string; path: string; modifiedMs: number }>('agent_project_save_scenes', { project, scenes });
 
 export const onAgentEvent = (handler: (event: AgentRawEvent) => void) =>
   listen<AgentRawEvent>('agent_event', (event) => handler(event.payload));
@@ -101,6 +125,7 @@ export interface ChatgptStatus {
     };
     /** Has ChatGPT actually reached this server through the tunnel. */
     chatgpt: { seen: boolean; lastMethod: string | null; lastAt: string | null };
+    recentActivity: ChatgptActivity[];
   };
   lastError: string | null;
   config: ChatgptConfigView;

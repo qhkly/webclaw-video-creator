@@ -1,5 +1,5 @@
 import { Download, Film, LayoutDashboard, ListVideo, PenLine, Play, Scissors, Settings, Sparkles, Volume2 } from 'lucide-react';
-import { useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import AgentPage from './pages/AgentPage';
 import CutterPage from './pages/CutterPage';
 import ExportPage from './pages/ExportPage';
@@ -9,6 +9,7 @@ import ScriptEditor from './pages/ScriptEditor';
 import SettingsPanel from './pages/SettingsPanel';
 import ThemePanel from './components/ThemePanel';
 import { getSettings } from './lib/tauri-bridge';
+import { listProjects, projectSnapshot, saveProjectScenes, type ProjectSummary } from './lib/agent-bridge';
 import { useVideoStore } from './store/useVideoStore';
 import { useI18n, type Locale } from './i18n';
 
@@ -29,11 +30,26 @@ export default function App() {
   const setActivePage = useVideoStore((state) => state.setActivePage);
   const setSettings = useVideoStore((state) => state.setSettings);
   const scenes = useVideoStore((state) => state.scenes);
+  const currentProjectId = useVideoStore((state) => state.currentProjectId);
+  const projectRevision = useVideoStore((state) => state.projectRevision);
+  const savedProjectRevision = useVideoStore((state) => state.savedProjectRevision);
+  const loadProject = useVideoStore((state) => state.loadProject);
+  const markProjectSaved = useVideoStore((state) => state.markProjectSaved);
   const aspect = useVideoStore((state) => state.aspect);
   const { t, locale, setLocale } = useI18n();
+  const [projects, setProjects] = useState<ProjectSummary[]>([]);
+  const [projectBusy, setProjectBusy] = useState(false);
   const totalSeconds = scenes.reduce((total, scene) => total + scene.duration, 0);
   const voicedCount = scenes.filter((scene) => scene.audio).length;
   const inSceneWorkflow = SCENE_WORKFLOW_PAGES.has(activePage);
+
+  const loadProjectById = useCallback(async (projectId: string, knownModifiedMs = 0) => {
+    const snapshot = await projectSnapshot(projectId);
+    if (!snapshot.scenes) {
+      return;
+    }
+    loadProject(projectId, snapshot.dir, snapshot.scenes, knownModifiedMs);
+  }, [loadProject]);
 
   useEffect(() => {
     void getSettings()
@@ -41,12 +57,101 @@ export default function App() {
       .catch(() => {});
   }, [setSettings]);
 
+  // The stable app-data workspace is the source of truth for projects created
+  // by ChatGPT, the built-in Agent, and the visual editor.
+  useEffect(() => {
+    let cancelled = false;
+    const refresh = async () => {
+      try {
+        const next = await listProjects();
+        if (cancelled) return;
+        setProjects(next);
+        const state = useVideoStore.getState();
+        const dirty = state.projectRevision !== state.savedProjectRevision;
+        if (!state.currentProjectId && next[0]) {
+          await loadProjectById(next[0].id, next[0].modifiedMs);
+          return;
+        }
+        if (!dirty && state.currentProjectId) {
+          const current = next.find((item) => item.id === state.currentProjectId);
+          if (current && current.modifiedMs > state.currentProjectModifiedMs) {
+            await loadProjectById(current.id, current.modifiedMs);
+          }
+        }
+      } catch {
+        // Keep the current in-memory project if the workspace is temporarily unavailable.
+      }
+    };
+    void refresh();
+    const timer = window.setInterval(() => void refresh(), 2000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [loadProjectById]);
+
+  // Visual edits to a disk-backed project are persisted atomically after a
+  // short debounce. Loading a project resets both revisions so it never writes
+  // the old demo scenes back over a ChatGPT-generated project.
+  useEffect(() => {
+    if (!currentProjectId || projectRevision === savedProjectRevision) {
+      return undefined;
+    }
+    const revision = projectRevision;
+    const timer = window.setTimeout(() => {
+      void saveProjectScenes(currentProjectId, scenes)
+        .then((result) => markProjectSaved(revision, result.modifiedMs))
+        .catch(() => {});
+    }, 700);
+    return () => window.clearTimeout(timer);
+  }, [currentProjectId, projectRevision, savedProjectRevision, scenes, markProjectSaved]);
+
+  const switchProject = useCallback(async (projectId: string) => {
+    if (!projectId || projectId === currentProjectId || projectBusy) {
+      return;
+    }
+    setProjectBusy(true);
+    try {
+      const state = useVideoStore.getState();
+      if (state.currentProjectId && state.projectRevision !== state.savedProjectRevision) {
+        const saved = await saveProjectScenes(state.currentProjectId, state.scenes);
+        state.markProjectSaved(state.projectRevision, saved.modifiedMs);
+      }
+      const summary = projects.find((item) => item.id === projectId);
+      await loadProjectById(projectId, summary?.modifiedMs ?? 0);
+    } finally {
+      setProjectBusy(false);
+    }
+  }, [currentProjectId, projectBusy, projects, loadProjectById]);
+
   return (
     <div className="app">
       <header className="titlebar">
         <div className="tb-project">
           <span className="dot" />
-          <span>{inSceneWorkflow ? t.app.projectName : t.nav[activePage]}</span>
+          {inSceneWorkflow ? (
+            projects.length > 0 ? (
+              <select
+                className="tb-project-select"
+                value={currentProjectId ?? ''}
+                disabled={projectBusy}
+                aria-label={t.app.projectSelect}
+                onChange={(event) => void switchProject(event.target.value)}
+              >
+                {!currentProjectId && <option value="">{t.app.projectName}</option>}
+                {projects.map((project) => (
+                  <option key={project.id} value={project.id}>
+                    {project.id}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <span>{currentProjectId ?? t.app.projectName}</span>
+            )
+          ) : (
+            <span>{t.nav[activePage]}</span>
+          )}
+          {inSceneWorkflow && currentProjectId && projectRevision !== savedProjectRevision && <span className="badge">{t.app.unsaved}</span>}
           {inSceneWorkflow && <span className="badge">{aspect}</span>}
           {inSceneWorkflow && <span className="badge">{totalSeconds}s</span>}
         </div>

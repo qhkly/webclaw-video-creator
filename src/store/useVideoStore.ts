@@ -59,6 +59,11 @@ const defaultScenes: VideoScene[] = [
 
 interface VideoStore {
   scenes: VideoScene[];
+  currentProjectId: string | null;
+  currentProjectDir: string | null;
+  currentProjectModifiedMs: number;
+  projectRevision: number;
+  savedProjectRevision: number;
   activePage: 'agent' | 'cutter' | 'script' | 'scenes' | 'preview' | 'export' | 'settings';
   aspect: Aspect;
   voice: string;
@@ -72,6 +77,8 @@ interface VideoStore {
   setSettings: (settings: CreatorSettings) => void;
   updateCaptionSettings: (patch: Partial<CaptionSettings>) => void;
   setScenes: (scenes: VideoScene[]) => void;
+  loadProject: (projectId: string, projectDir: string, scenes: VideoScene[], modifiedMs?: number) => void;
+  markProjectSaved: (revision: number, modifiedMs: number) => void;
   updateScene: (id: string, patch: Partial<VideoScene>) => void;
   moveScene: (id: string, direction: -1 | 1) => void;
   splitScript: (script: string) => void;
@@ -79,6 +86,11 @@ interface VideoStore {
 
 export const useVideoStore = create<VideoStore>((set) => ({
   scenes: defaultScenes,
+  currentProjectId: null,
+  currentProjectDir: null,
+  currentProjectModifiedMs: 0,
+  projectRevision: 0,
+  savedProjectRevision: 0,
   activePage: 'agent',
   aspect: '16:9',
   voice: 'zh-CN-YunxiNeural',
@@ -133,10 +145,30 @@ export const useVideoStore = create<VideoStore>((set) => ({
         },
       };
     }),
-  setScenes: (scenes) => set({ scenes }),
+  setScenes: (scenes) =>
+    set((state) => ({
+      scenes,
+      projectRevision: state.currentProjectId ? state.projectRevision + 1 : state.projectRevision,
+    })),
+  loadProject: (currentProjectId, currentProjectDir, scenes, currentProjectModifiedMs = 0) =>
+    set({
+      currentProjectId,
+      currentProjectDir,
+      currentProjectModifiedMs,
+      scenes,
+      projectRevision: 0,
+      savedProjectRevision: 0,
+    }),
+  markProjectSaved: (revision, currentProjectModifiedMs) =>
+    set((state) =>
+      state.projectRevision === revision
+        ? { savedProjectRevision: revision, currentProjectModifiedMs }
+        : { currentProjectModifiedMs },
+    ),
   updateScene: (id, patch) =>
     set((state) => ({
       scenes: state.scenes.map((scene) => (scene.id === id ? { ...scene, ...patch } : scene)),
+      projectRevision: state.currentProjectId ? state.projectRevision + 1 : state.projectRevision,
     })),
   moveScene: (id, direction) =>
     set((state) => {
@@ -148,10 +180,13 @@ export const useVideoStore = create<VideoStore>((set) => ({
       const scenes = [...state.scenes];
       const [scene] = scenes.splice(index, 1);
       scenes.splice(nextIndex, 0, scene);
-      return { scenes };
+      return {
+        scenes,
+        projectRevision: state.currentProjectId ? state.projectRevision + 1 : state.projectRevision,
+      };
     }),
   splitScript: (script) =>
-    set({
+    set((state) => ({
       scenes: script
         .split(/\n\s*\n/)
         .map((part) => part.trim())
@@ -176,5 +211,6 @@ export const useVideoStore = create<VideoStore>((set) => ({
                   : { kicker: 'WEBCLAW', title, subtitle: part.slice(title.length).trim(), bgColor: '#0f172a' },
           };
         }),
-    }),
+      projectRevision: state.currentProjectId ? state.projectRevision + 1 : state.projectRevision,
+    })),
 }));

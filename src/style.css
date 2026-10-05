@@ -123,6 +123,21 @@ label {
   background: var(--accent);
 }
 
+.tb-project-select {
+  width: auto;
+  max-width: 240px;
+  height: 28px;
+  padding: 0 28px 0 8px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background-color: var(--surface-3);
+  color: var(--text);
+  box-shadow: none;
+  font-size: 12px;
+  font-weight: 800;
+  -webkit-app-region: no-drag;
+}
+
 .badge {
   padding: 1px 7px;
   border: 1px solid var(--border);

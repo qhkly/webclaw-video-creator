@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
-use tauri::Manager;
+use super::agent_commands::{project_dir as app_project_dir, video_work_dir};
 use super::node_env::node_command;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -38,10 +38,10 @@ pub async fn fetch_assets(
         return Err("请先在设置里填写 Pexels API Key".to_string());
     }
 
-    let app_project_dir = resolve_project_dir(&app)?;
+    let app_project_dir = app_project_dir(&app)?;
     let asset_root = project_dir
         .map(PathBuf::from)
-        .unwrap_or_else(|| app_project_dir.join(".video-work"))
+        .unwrap_or(video_work_dir(&app)?)
         .join("assets");
     let script_path = app_project_dir.join("scripts").join("fetch-assets.mjs");
     let output = node_command()
@@ -67,17 +67,4 @@ pub async fn fetch_assets(
 
     serde_json::from_slice(&output.stdout)
         .map_err(|error| format!("invalid Pexels JSON output: {error}"))
-}
-
-fn resolve_project_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
-    if let Some(manifest_dir) = option_env!("CARGO_MANIFEST_DIR") {
-        if let Some(parent) = PathBuf::from(manifest_dir).parent() {
-            return Ok(parent.to_path_buf());
-        }
-    }
-    match app.path().resolve("", tauri::path::BaseDirectory::Resource) {
-        Ok(path) => Ok(path),
-        Err(_) => std::env::current_dir()
-            .map_err(|error| format!("failed to resolve project directory: {error}")),
-    }
 }

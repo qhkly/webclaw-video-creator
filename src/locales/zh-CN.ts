@@ -1,6 +1,8 @@
 const zhCN = {
   app: {
     projectName: '未命名项目',
+    projectSelect: '选择项目',
+    unsaved: '保存中',
     workflow: '制作流程',
     voiceProgress: '配音进度',
     voiceProgressDesc: '个场景已生成配音',
@@ -89,6 +91,9 @@ const zhCN = {
     invalidProject: '项目名只能包含字母、数字、点、下划线和短横线',
     status: { idle: '待命', running: '制作中', done: '已完成', failed: '失败', stopped: '已停止' },
     progress: '制作进度',
+    remoteProgress: 'ChatGPT 远程生成过程',
+    remoteEmpty: 'ChatGPT 通过安全隧道调用视频工具时，每一步都会显示在这里。',
+    remoteProject: '打开这个项目',
     emptyTimeline: 'Agent 的规划、每一步工具调用和需要你确认的操作会显示在这里。',
     sessionStarted: 'Agent 已启动，正在规划…',
     results: '成片与中间结果',

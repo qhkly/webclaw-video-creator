@@ -47,7 +47,7 @@ export function resolvePort(value = DEFAULT_HTTP_PORT) {
  * Request handler around an MCP server core (createMcpServer). `token` is required:
  * the endpoint is never served unauthenticated, even on loopback.
  */
-export function createHttpHandler({ server, token, log = () => {}, onRequest = () => {} }) {
+export function createHttpHandler({ server, token, log = () => {}, onRequest = () => {}, onResponse = () => {} }) {
   if (!token || typeof token !== 'string') {
     throw new Error('createHttpHandler requires a bearer token');
   }
@@ -84,7 +84,9 @@ export function createHttpHandler({ server, token, log = () => {}, onRequest = (
     }
 
     const method = typeof message?.method === 'string' ? message.method : null;
-    onRequest({ method, tool: method === 'tools/call' ? message.params?.name : undefined });
+    const tool = method === 'tools/call' ? message.params?.name : undefined;
+    const args = method === 'tools/call' && message.params?.arguments && typeof message.params.arguments === 'object' ? message.params.arguments : undefined;
+    onRequest({ id: message?.id, method, tool, arguments: args });
     // Progress notifications need a stream; in JSON mode they are dropped.
     const response = await server.handle(message, () => {});
     if (!response) {
@@ -97,6 +99,7 @@ export function createHttpHandler({ server, token, log = () => {}, onRequest = (
     if (response.error) {
       log(`rpc ${method ?? '?'} -> ${response.error.code} ${response.error.message}`);
     }
+    onResponse({ id: message?.id, method, tool, arguments: args, response });
     sendJson(res, 200, response);
   };
 }
@@ -105,9 +108,9 @@ export function createHttpHandler({ server, token, log = () => {}, onRequest = (
  * Listen on 127.0.0.1 only. An occupied port is reported (PortInUseError) — never
  * replaced by another port — after checking whether the holder is another Video Creator.
  */
-export async function startHttpMcp({ server, token, port = DEFAULT_HTTP_PORT, log = () => {}, onRequest } = {}) {
+export async function startHttpMcp({ server, token, port = DEFAULT_HTTP_PORT, log = () => {}, onRequest, onResponse } = {}) {
   const wanted = resolvePort(port);
-  const httpServer = createServer(createHttpHandler({ server, token, log, onRequest }));
+  const httpServer = createServer(createHttpHandler({ server, token, log, onRequest, onResponse }));
   try {
     await new Promise((resolvePromise, rejectPromise) => {
       httpServer.once('error', rejectPromise);

@@ -1,6 +1,6 @@
 import { Bot, Check, ChevronDown, ChevronRight, CircleAlert, Film, ListVideo, Loader2, RefreshCw, Send, ShieldCheck, Square, Wrench, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { decideApproval, detectAgentClis, previewSrc, projectSnapshot, type ApprovalRequest, type ProjectSnapshot } from '../lib/agent-bridge';
+import { chatgptStatus, decideApproval, detectAgentClis, previewSrc, projectSnapshot, type ApprovalRequest, type ChatgptActivity, type ProjectSnapshot } from '../lib/agent-bridge';
 import type { AgentEvent } from '../lib/agent-events';
 import { ensureAgentListener, runAgentTask, stopAgentTask } from '../lib/agent-runtime';
 import { useAgentStore, type TimelineItem } from '../store/useAgentStore';
@@ -13,11 +13,12 @@ const REFRESH_TOOLS = new Set(['video_scenes_save', 'video_tts_synthesize', 'vid
 export default function AgentPage() {
   const { t } = useI18n();
   const store = useAgentStore();
-  const setScenes = useVideoStore((state) => state.setScenes);
+  const loadProject = useVideoStore((state) => state.loadProject);
   const setActivePage = useVideoStore((state) => state.setActivePage);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [startError, setStartError] = useState('');
   const [snapshot, setSnapshot] = useState<ProjectSnapshot | null>(null);
+  const [remoteActivity, setRemoteActivity] = useState<ChatgptActivity[]>([]);
   const running = store.status === 'running';
   const projectValid = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(store.project.trim());
 
@@ -39,6 +40,37 @@ export default function AgentPage() {
   }, [store.project, projectValid]);
 
   useEffect(refreshSnapshot, [refreshSnapshot]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const refreshRemote = async () => {
+      try {
+        const info = await chatgptStatus();
+        if (cancelled) return;
+        const activity = info.status?.recentActivity ?? [];
+        setRemoteActivity(activity);
+        const latestProject = [...activity].reverse().find((item) => item.project)?.project;
+        if (latestProject && store.status !== 'running' && latestProject !== store.project) {
+          store.setProject(latestProject);
+        }
+      } catch {
+        if (!cancelled) setRemoteActivity([]);
+      }
+    };
+    void refreshRemote();
+    const timer = window.setInterval(() => void refreshRemote(), 1500);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [store.status, store.project, store.setProject]);
+
+  async function openProject(project: string) {
+    const next = await projectSnapshot(project);
+    if (!next.scenes) return;
+    loadProject(next.project, next.dir, next.scenes, 0);
+    setActivePage('scenes');
+  }
 
   // Refresh results whenever a tool that produces files finishes, and when the run ends.
   const toolNames = useMemo(() => {
@@ -172,6 +204,33 @@ export default function AgentPage() {
         )}
       </div>
 
+      <div className="card agent-remote">
+        <div className="card-toolbar">
+          <b>{t.agent.remoteProgress}</b>
+          {remoteActivity.length > 0 && (
+            <span className="tag-dim">{remoteActivity.length}</span>
+          )}
+        </div>
+        {remoteActivity.length === 0 ? (
+          <div className="agent-empty">{t.agent.remoteEmpty}</div>
+        ) : (
+          <ol className="agent-events agent-remote-events">
+            {[...remoteActivity].reverse().map((item) => (
+              <li key={item.id} className={item.state === 'error' ? 'ev ev-fail' : item.state === 'done' ? 'ev ev-ok' : 'ev ev-tool'}>
+                {item.state === 'started' ? <Loader2 size={13} className="spin" /> : item.state === 'done' ? <Check size={13} /> : <CircleAlert size={13} />}
+                <b>{t.agent.tools[item.tool] ?? item.tool}</b>
+                {item.summary && <code>{item.summary}</code>}
+                {item.project && (
+                  <button className="btn btn-soft btn-sm agent-remote-open" onClick={() => void openProject(item.project!)}>
+                    {t.agent.remoteProject}
+                  </button>
+                )}
+              </li>
+            ))}
+          </ol>
+        )}
+      </div>
+
       <div className="agent-grid">
         <div className="card agent-timeline">
           <div className="card-toolbar">
@@ -222,10 +281,7 @@ export default function AgentPage() {
               {snapshot?.scenes && (
                 <button
                   className="btn btn-soft btn-sm"
-                  onClick={() => {
-                    setScenes(snapshot.scenes ?? []);
-                    setActivePage('scenes');
-                  }}
+                  onClick={() => void openProject(snapshot.project)}
                 >
                   {t.agent.openInEditor}
                 </button>

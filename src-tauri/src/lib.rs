@@ -1,8 +1,8 @@
 mod commands;
 
 use commands::agent_commands::{
-    agent_decide_approval, agent_detect_clis, agent_pending_approvals, agent_project_snapshot, agent_start,
-    agent_stop, video_work_dir,
+    agent_decide_approval, agent_detect_clis, agent_list_projects, agent_pending_approvals, agent_project_save_scenes,
+    agent_project_snapshot, agent_start, agent_stop, video_work_dir,
 };
 use commands::asset_commands::fetch_assets;
 use commands::chatgpt_commands::{chatgpt_get_config, chatgpt_save_config, chatgpt_start, chatgpt_status, chatgpt_stop, open_external_url};
@@ -44,6 +44,8 @@ pub fn run() {
             agent_stop,
             agent_pending_approvals,
             agent_decide_approval,
+            agent_list_projects,
+            agent_project_save_scenes,
             agent_project_snapshot,
             chatgpt_get_config,
             chatgpt_save_config,

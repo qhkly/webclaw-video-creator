@@ -1,5 +1,5 @@
 use std::path::{Path, PathBuf};
-use tauri::Manager;
+use super::agent_commands::{project_dir, video_work_dir};
 use super::node_env::node_command;
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
@@ -26,9 +26,11 @@ pub async fn generate_tts(
     voice: String,
     output: String,
     engine: String,
+    project: Option<String>,
 ) -> Result<TtsResult, String> {
     let project_dir = project_dir(&app)?;
-    let output_path = normalize_output_path(&project_dir, &output);
+    let workspace = video_work_dir(&app)?;
+    let output_path = normalize_output_path(&workspace, project.as_deref(), &output)?;
     let script_path = project_dir.join("scripts").join("tts.mjs");
     let output = node_command()
         .current_dir(&project_dir)
@@ -54,24 +56,45 @@ pub async fn generate_tts(
     Ok(value)
 }
 
-fn normalize_output_path(project_dir: &Path, output: &str) -> PathBuf {
+fn normalize_output_path(workspace: &Path, project: Option<&str>, output: &str) -> Result<PathBuf, String> {
     let path = PathBuf::from(output);
     if path.is_absolute() {
-        path
-    } else {
-        project_dir.join(".video-work").join("audio").join(path)
+        return Ok(path);
     }
+    let base = match project.map(str::trim).filter(|value| !value.is_empty()) {
+        Some(project) => {
+            if project.len() > 64 || project.starts_with('.') || !project.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-')) {
+                return Err("invalid project id".to_string());
+            }
+            workspace.join("projects").join(project).join("audio")
+        }
+        None => workspace.join("audio"),
+    };
+    Ok(base.join(path))
 }
 
-fn project_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
-    if let Some(manifest_dir) = option_env!("CARGO_MANIFEST_DIR") {
-        if let Some(parent) = PathBuf::from(manifest_dir).parent() {
-            return Ok(parent.to_path_buf());
-        }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn relative_tts_output_uses_stable_project_audio_directory() {
+        let workspace = PathBuf::from("/app-data/video-work");
+        assert_eq!(
+            normalize_output_path(&workspace, Some("chatgpt-smoke"), "s1.mp3").unwrap(),
+            workspace.join("projects/chatgpt-smoke/audio/s1.mp3")
+        );
+        assert_eq!(
+            normalize_output_path(&workspace, None, "scratch.mp3").unwrap(),
+            workspace.join("audio/scratch.mp3")
+        );
     }
-    match app.path().resolve("", tauri::path::BaseDirectory::Resource) {
-        Ok(path) => Ok(path),
-        Err(_) => std::env::current_dir()
-            .map_err(|error| format!("failed to resolve project directory: {error}")),
+
+    #[test]
+    fn tts_project_id_cannot_escape_workspace() {
+        let workspace = PathBuf::from("/app-data/video-work");
+        assert!(normalize_output_path(&workspace, Some("../escape"), "x.mp3").is_err());
+        assert!(normalize_output_path(&workspace, Some(".hidden"), "x.mp3").is_err());
     }
 }

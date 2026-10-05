@@ -3,6 +3,8 @@ import type zhCN from './zh-CN';
 const enUS: typeof zhCN = {
   app: {
     projectName: 'Untitled project',
+    projectSelect: 'Select project',
+    unsaved: 'Saving',
     workflow: 'Workflow',
     voiceProgress: 'Voice progress',
     voiceProgressDesc: 'scenes have audio',
@@ -91,6 +93,9 @@ const enUS: typeof zhCN = {
     invalidProject: 'Project names may contain letters, digits, dots, underscores and dashes only',
     status: { idle: 'Idle', running: 'Working', done: 'Done', failed: 'Failed', stopped: 'Stopped' },
     progress: 'Progress',
+    remoteProgress: 'ChatGPT remote activity',
+    remoteEmpty: 'Each video-tool call from ChatGPT through the secure tunnel will appear here.',
+    remoteProject: 'Open this project',
     emptyTimeline: "The agent's plan, every tool call and anything needing your confirmation will appear here.",
     sessionStarted: 'Agent started, planning…',
     results: 'Results',

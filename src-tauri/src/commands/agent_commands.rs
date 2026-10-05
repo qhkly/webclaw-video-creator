@@ -133,7 +133,7 @@ pub async fn agent_start(app: AppHandle, params: AgentStartParams) -> Result<Age
     };
 
     let app_root = project_dir(&app)?;
-    let workspace = app_root.join(".video-work");
+    let workspace = video_work_dir(&app)?;
     let run_id = format!(
         "{}-{}",
         SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_millis()).unwrap_or(0),
@@ -328,13 +328,136 @@ pub async fn agent_decide_approval(
         .map_err(|error| format!("failed to write decision: {error}"))
 }
 
+#[tauri::command]
+pub async fn agent_list_projects(app: AppHandle) -> Result<Value, String> {
+    let projects_dir = video_work_dir(&app)?.join("projects");
+    let mut projects = Vec::new();
+    let Ok(mut entries) = tokio::fs::read_dir(&projects_dir).await else {
+        return Ok(Value::Array(projects));
+    };
+    while let Ok(Some(entry)) = entries.next_entry().await {
+        let Ok(file_type) = entry.file_type().await else {
+            continue;
+        };
+        if !file_type.is_dir() {
+            continue;
+        }
+        let id = entry.file_name().to_string_lossy().to_string();
+        if !is_safe_id(&id) {
+            continue;
+        }
+        let dir = entry.path();
+        let scenes = tokio::fs::read_to_string(dir.join("scenes.json"))
+            .await
+            .ok()
+            .and_then(|contents| serde_json::from_str::<Value>(&contents).ok())
+            .and_then(|value| value.as_array().cloned());
+        let scene_count = scenes.as_ref().map_or(0, Vec::len);
+        let voiced_count = scenes
+            .as_ref()
+            .map(|items| {
+                items
+                    .iter()
+                    .filter(|scene| scene.get("audio").is_some_and(|audio| !audio.is_null()))
+                    .count()
+            })
+            .unwrap_or(0);
+        let total_duration = scenes
+            .as_ref()
+            .map(|items| {
+                items
+                    .iter()
+                    .filter_map(|scene| scene.get("duration").and_then(Value::as_f64))
+                    .sum::<f64>()
+            })
+            .unwrap_or(0.0);
+        let mut modified_ms = tokio::fs::metadata(dir.join("scenes.json"))
+            .await
+            .ok()
+            .and_then(|meta| meta.modified().ok())
+            .and_then(|time| time.duration_since(UNIX_EPOCH).ok())
+            .map(|duration| duration.as_millis() as u64)
+            .unwrap_or(0);
+        let mut render_count = 0usize;
+        if let Ok(mut renders) = tokio::fs::read_dir(dir.join("renders")).await {
+            while let Ok(Some(render)) = renders.next_entry().await {
+                let path = render.path();
+                let is_video = path
+                    .extension()
+                    .and_then(|ext| ext.to_str())
+                    .map(|ext| matches!(ext.to_ascii_lowercase().as_str(), "mp4" | "mov" | "webm"))
+                    .unwrap_or(false);
+                if is_video {
+                    render_count += 1;
+                    if let Ok(meta) = render.metadata().await {
+                        if let Some(ms) = meta
+                            .modified()
+                            .ok()
+                            .and_then(|time| time.duration_since(UNIX_EPOCH).ok())
+                            .map(|duration| duration.as_millis() as u64)
+                        {
+                            modified_ms = modified_ms.max(ms);
+                        }
+                    }
+                }
+            }
+        }
+        projects.push(json!({
+            "id": id,
+            "modifiedMs": modified_ms,
+            "sceneCount": scene_count,
+            "voicedCount": voiced_count,
+            "totalDuration": total_duration,
+            "renderCount": render_count,
+        }));
+    }
+    projects.sort_by_key(|project| std::cmp::Reverse(project["modifiedMs"].as_u64().unwrap_or(0)));
+    Ok(Value::Array(projects))
+}
+
+#[tauri::command]
+pub async fn agent_project_save_scenes(
+    app: AppHandle,
+    project: String,
+    scenes: Value,
+) -> Result<Value, String> {
+    if !is_safe_id(&project) {
+        return Err("invalid project id".to_string());
+    }
+    if !scenes.is_array() {
+        return Err("scenes must be an array".to_string());
+    }
+    let dir = video_work_dir(&app)?.join("projects").join(&project);
+    tokio::fs::create_dir_all(&dir)
+        .await
+        .map_err(|error| format!("failed to create project directory: {error}"))?;
+    let path = dir.join("scenes.json");
+    let staging = dir.join("scenes.json.tmp");
+    let contents = serde_json::to_vec_pretty(&scenes)
+        .map_err(|error| format!("failed to serialize scenes: {error}"))?;
+    tokio::fs::write(&staging, contents)
+        .await
+        .map_err(|error| format!("failed to stage scenes: {error}"))?;
+    tokio::fs::rename(&staging, &path)
+        .await
+        .map_err(|error| format!("failed to save scenes: {error}"))?;
+    let modified_ms = tokio::fs::metadata(&path)
+        .await
+        .ok()
+        .and_then(|meta| meta.modified().ok())
+        .and_then(|time| time.duration_since(UNIX_EPOCH).ok())
+        .map(|duration| duration.as_millis() as u64)
+        .unwrap_or(0);
+    Ok(json!({ "project": project, "path": path.to_string_lossy(), "modifiedMs": modified_ms }))
+}
+
 /// Scenes and rendered files of one project, for the Agent page's result panel.
 #[tauri::command]
 pub async fn agent_project_snapshot(app: AppHandle, project: String) -> Result<Value, String> {
     if !is_safe_id(&project) {
         return Err("invalid project id".to_string());
     }
-    let dir = project_dir(&app)?.join(".video-work").join("projects").join(&project);
+    let dir = video_work_dir(&app)?.join("projects").join(&project);
     let scenes = tokio::fs::read_to_string(dir.join("scenes.json"))
         .await
         .ok()

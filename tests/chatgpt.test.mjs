@@ -107,6 +107,29 @@ test('HTTP MCP: initialize, tools/list (video tools only), read-only video tool'
   }
 });
 
+test('ChatGPT tools/call activity is recorded safely for the app timeline', async () => {
+  const b = await bridge();
+  try {
+    await b.rpc('tools/list');
+    await b.rpc('tools/call', { name: 'video_project_status', arguments: { project: 'activity-demo' } });
+    await new Promise((resolve) => setTimeout(resolve, 350));
+    const status = JSON.parse(await readFile(join(b.stateDir, 'status.json'), 'utf8'));
+    assert.ok(Array.isArray(status.recentActivity));
+    assert.equal(status.recentActivity.length, 1, 'tools/list is not a generation step');
+    const [activity] = status.recentActivity;
+    assert.equal(activity.tool, 'video_project_status');
+    assert.equal(activity.project, 'activity-demo');
+    assert.equal(activity.state, 'done');
+    assert.match(activity.summary, /project=activity-demo/);
+    assert.ok(activity.startedAt);
+    assert.ok(activity.finishedAt);
+    assert.ok(!JSON.stringify(activity).includes(API_KEY));
+    assert.ok(!JSON.stringify(activity).includes(b.token));
+  } finally {
+    await b.stop();
+  }
+});
+
 test('HTTP MCP: OpenAI stateless handshake (server/discover, 2026-07-28 resultType)', async () => {
   const b = await bridge();
   try {
