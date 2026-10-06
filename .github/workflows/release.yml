@@ -6,6 +6,9 @@ on:
       - 'v*'
   workflow_dispatch:
 
+env:
+  VIDEO_CREATOR_ACCOUNT_API_URL: https://video-api.qhkly.com
+
 jobs:
   build-macos-arm64:
     name: macOS (arm64)
