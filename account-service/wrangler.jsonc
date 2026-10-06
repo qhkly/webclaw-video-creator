@@ -15,7 +15,7 @@
   // Revocable app sessions. Create with:
   //   npx wrangler kv namespace create SESSIONS
   // and paste the id here (deploy fails until then, on purpose).
-  "kv_namespaces": [{ "binding": "SESSIONS", "id": "REPLACE_WITH_SESSIONS_KV_NAMESPACE_ID" }],
+  "kv_namespaces": [{ "binding": "SESSIONS", "id": "72ebf778533b4fab9500cf04ab82a0e8" }],
 
   // Non-secret settings. The store credential is a secret:
   //   npx wrangler secret put STORE_CLIENT_SECRET
