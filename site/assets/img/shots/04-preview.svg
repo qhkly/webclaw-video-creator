@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2560 1600" role="img" aria-label="Live preview placeholder">
+<rect width="2560" height="1600" fill="#eceaf4"/>
+<g fill="none" stroke="#c9c3dc" stroke-width="4">
+  <rect x="0" y="0" width="360" height="1600" fill="#e4e0f0"/>
+  <rect x="70" y="70" width="220" height="150" rx="18" fill="#d8d2ea"/>
+  <rect x="70" y="300" width="220" height="70" rx="12" fill="#dcd7ee"/><rect x="70" y="410" width="220" height="70" rx="12" fill="#dcd7ee"/><rect x="70" y="520" width="220" height="70" rx="12" fill="#dcd7ee"/><rect x="70" y="630" width="220" height="70" rx="12" fill="#dcd7ee"/><rect x="70" y="740" width="220" height="70" rx="12" fill="#dcd7ee"/><rect x="70" y="850" width="220" height="70" rx="12" fill="#dcd7ee"/><rect x="70" y="960" width="220" height="70" rx="12" fill="#dcd7ee"/>
+</g>
+<g fill="none" stroke="#c9c3dc" stroke-width="4"><rect x="440" y="80" width="1440" height="930" rx="20" fill="#d8d2ea"/><path d="M1080 480 l140 85 -140 85 z" fill="#c9c3dc" stroke="none"/><rect x="440" y="1060" width="1440" height="460" rx="20" fill="#f7f5fc"/><rect x="1960" y="80" width="520" height="1440" rx="20" fill="#f2eff9"/><line x1="2040" y1="220" x2="2400" y2="220" stroke="#c9c3dc" stroke-width="10" stroke-linecap="round"/><line x1="2040" y1="420" x2="2400" y2="420" stroke="#c9c3dc" stroke-width="10" stroke-linecap="round"/><line x1="2040" y1="620" x2="2400" y2="620" stroke="#c9c3dc" stroke-width="10" stroke-linecap="round"/><line x1="2040" y1="820" x2="2400" y2="820" stroke="#c9c3dc" stroke-width="10" stroke-linecap="round"/><line x1="2040" y1="1020" x2="2400" y2="1020" stroke="#c9c3dc" stroke-width="10" stroke-linecap="round"/><line x1="2040" y1="1220" x2="2400" y2="1220" stroke="#c9c3dc" stroke-width="10" stroke-linecap="round"/></g>
+<text x="1280" y="1544" text-anchor="middle" font-family="-apple-system,Segoe UI,PingFang SC,sans-serif" font-size="52" font-weight="600" fill="#8f87a8">Live preview — screenshot placeholder</text>
+</svg>

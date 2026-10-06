@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Privacy — WebClaw Video Creator</title>
+<meta name="description" content="How WebClaw Video Creator handles data: local projects, AI features routed through your own provider accounts, and payments handled by the WebClaw Store.">
+<link rel="canonical" href="https://video.qhkly.com/privacy.html">
+<link rel="icon" href="assets/img/favicon.svg" type="image/svg+xml">
+<meta name="robots" content="noindex">
+<link rel="stylesheet" href="assets/css/site.css">
+<script>
+  document.documentElement.className += ' js';
+  try {
+    var t = localStorage.getItem('wvc-theme');
+    if (t === 'dark' || t === 'light') document.documentElement.setAttribute('data-theme', t);
+  } catch (e) {}
+</script>
+</head>
+<body data-page="/privacy.html">
+
+<header class="nav">
+  <div class="wrap nav-in">
+    <a class="brand" href="./"><img src="assets/img/logo.svg" alt="" width="26" height="26">WebClaw <span>Video Creator</span></a>
+    <div class="nav-tools" style="margin-left:auto">
+      <div class="lang"><a href="./privacy.html" aria-current="true">EN</a><a href="zh/privacy.html">中文</a></div>
+      <button class="icon-btn" data-theme-toggle type="button" aria-label="Switch theme">
+        <svg class="sun" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5 5l1.5 1.5M17.5 17.5L19 19M19 5l-1.5 1.5M6.5 17.5L5 19"/></svg>
+        <svg class="moon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.2A8.2 8.2 0 0 1 9.8 4a8.4 8.4 0 1 0 10.2 10.2z"/></svg>
+      </button>
+      <a class="btn btn-primary btn-sm" data-link="downloadUrl" href="https://github.com/qhkly/webclaw-video-creator/releases/latest">Download</a>
+    </div>
+  </div>
+</header>
+
+<main class="legal">
+  <div class="wrap">
+    <h1>Privacy</h1>
+    <p class="meta">WebClaw Video Creator · last updated 2026-10-06</p>
+
+    <h2>Short version</h2>
+    <p>Your video projects, media, and rendered files stay on your computer. AI features send only the content you explicitly approve, directly to your own provider accounts. This website is static and contains no analytics or tracking scripts. Purchases happen in the WebClaw Store, which has its own privacy policy.</p>
+
+    <h2>The website</h2>
+    <p>This site is a set of static pages. It loads no analytics, no advertising, and no third-party trackers. Your language and theme preferences are stored in your browser's local storage and never leave your device.</p>
+
+    <h2>The desktop app</h2>
+    <ul>
+      <li><b>Local data.</b> Projects, imported footage, generated assets, and exported videos are files on your disk. The app does not upload them anywhere on its own.</li>
+      <li><b>AI features.</b> Script drafting, image generation, and related features run through AI accounts you connect yourself — a local Claude Code or Codex install, or your ChatGPT login via OpenAI's MCP tunnel. When you approve an action, its content (for example a prompt or a script section) is sent to that provider under your account and their privacy policy applies. The app itself does not include a telemetry SDK.</li>
+      <li><b>Credentials.</b> Login credentials for connected accounts are stored locally on your machine with restricted file permissions. They are used to authenticate your own requests and are not shared with us.</li>
+      <li><b>Speech recognition.</b> Transcription in the text-based cutter uses the provider you configure (an OpenAI-compatible endpoint, or a local whisper.cpp model). If you configure none, a local silence-detection fallback is used and no audio leaves your machine.</li>
+    </ul>
+
+    <h2>Purchases</h2>
+    <p>Licenses are sold through the WebClaw Store (store.qhkly.com). Payment details are handled by the store and its payment processors; we do not receive or store your card information. See the store's privacy policy for details.</p>
+
+    <h2>What we may collect</h2>
+    <p>When you contact us by email or file a GitHub issue, we keep the correspondence so we can answer it. We do not build profiles from your use of the app.</p>
+
+    <h2>Changes</h2>
+    <p>If this policy changes materially, the updated version will be published on this page with a new date.</p>
+
+    <h2>Contact</h2>
+    <p>Questions about privacy: <a href="mailto:jiayiqiu@qhkly.com">jiayiqiu@qhkly.com</a>.</p>
+  </div>
+</main>
+
+<footer class="footer">
+  <div class="wrap">
+    <div class="footer-top">
+      <a class="brand" href="./"><img src="assets/img/logo.svg" alt="" width="22" height="22">WebClaw <span>Video Creator</span></a>
+      <nav class="footer-links">
+        <a href="./">Home</a>
+        <a href="terms.html">Terms</a>
+        <a href="zh/privacy.html">中文</a>
+      </nav>
+    </div>
+    <p class="fine">© 2026 WebClaw Video Creator · part of the WebClaw family of developer tools.</p>
+  </div>
+</footer>
+
+<script src="assets/js/config.js" defer></script>
+<script src="assets/js/site.js" defer></script>
+</body>
+</html>
