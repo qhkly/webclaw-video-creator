@@ -8,6 +8,8 @@ import SceneManager from './pages/SceneManager';
 import ScriptEditor from './pages/ScriptEditor';
 import SettingsPanel from './pages/SettingsPanel';
 import ThemePanel from './components/ThemePanel';
+import { AccountRailCard } from './components/AccountPanel';
+import { startAccountSync } from './store/useAccountStore';
 import { getSettings } from './lib/tauri-bridge';
 import { listProjects, projectSnapshot, saveProjectScenes, type ProjectSummary } from './lib/agent-bridge';
 import { useVideoStore } from './store/useVideoStore';
@@ -50,6 +52,8 @@ export default function App() {
     }
     loadProject(projectId, snapshot.dir, snapshot.scenes, knownModifiedMs);
   }, [loadProject]);
+
+  useEffect(() => startAccountSync(), []);
 
   useEffect(() => {
     void getSettings()
@@ -204,6 +208,7 @@ export default function App() {
           </nav>
           <div className="rail-sep" />
           <div className="rail-foot">
+            <AccountRailCard />
             <div className="rail-card">
               <div className="t">
                 <Volume2 size={14} />

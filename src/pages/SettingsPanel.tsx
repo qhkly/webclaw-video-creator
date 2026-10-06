@@ -2,6 +2,7 @@ import { AudioLines, Save, Settings, Subtitles } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import type { Aspect, Resolution } from '../constants/aspect';
 import ChatgptConnectionCard from '../components/ChatgptConnectionCard';
+import { AccountSection } from '../components/AccountPanel';
 import { getSettings, saveSettings } from '../lib/tauri-bridge';
 import { DEFAULT_ASR, useVideoStore } from '../store/useVideoStore';
 import type { AsrSettings, CaptionSettings, CreatorSettings } from '../types';
@@ -48,6 +49,7 @@ export default function SettingsPanel() {
           <p>语音识别、Pexels、默认导出参数和烧录字幕样式。</p>
         </div>
       </header>
+      <AccountSection />
       <div className="settings-grid">
         <div className="card settings-card">
           <span className="field-label">

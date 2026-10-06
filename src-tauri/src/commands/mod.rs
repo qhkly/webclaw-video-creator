@@ -1,3 +1,4 @@
+pub mod account_commands;
 pub mod agent_commands;
 pub mod asset_commands;
 pub mod chatgpt_commands;

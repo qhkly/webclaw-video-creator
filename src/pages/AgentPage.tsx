@@ -6,6 +6,7 @@ import { ensureAgentListener, runAgentTask, stopAgentTask } from '../lib/agent-r
 import { useAgentStore, type TimelineItem } from '../store/useAgentStore';
 import { useVideoStore } from '../store/useVideoStore';
 import { useI18n } from '../i18n';
+import { FeatureGateNotice, useGate } from '../components/AccountPanel';
 import './agent.css';
 
 const REFRESH_TOOLS = new Set(['video_scenes_save', 'video_tts_synthesize', 'video_image_generate', 'video_render', 'video_audio_mux']);
@@ -17,6 +18,7 @@ export default function AgentPage() {
   const setActivePage = useVideoStore((state) => state.setActivePage);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [startError, setStartError] = useState('');
+  const directorGate = useGate('agent.director');
   const [snapshot, setSnapshot] = useState<ProjectSnapshot | null>(null);
   const [remoteActivity, setRemoteActivity] = useState<ChatgptActivity[]>([]);
   const running = store.status === 'running';
@@ -99,6 +101,7 @@ export default function AgentPage() {
 
   async function start() {
     setStartError('');
+    if (!directorGate.allowed) return;
     try {
       await runAgentTask();
     } catch (error) {
@@ -163,12 +166,13 @@ export default function AgentPage() {
               {t.agent.stop}
             </button>
           ) : (
-            <button className="btn btn-primary" disabled={!store.task.trim() || !projectValid || !anyCli} onClick={() => void start()}>
+            <button className="btn btn-primary" disabled={!store.task.trim() || !projectValid || !anyCli || !directorGate.allowed} onClick={() => void start()}>
               <Send size={14} />
               {t.agent.start}
             </button>
           )}
         </div>
+        <FeatureGateNotice access={directorGate.access} />
         {showAdvanced && (
           <div className="agent-advanced">
             <label>

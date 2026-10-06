@@ -1,5 +1,9 @@
 mod commands;
 
+use commands::account_commands::{
+    account_cancel_login, account_get, account_logout, account_open_checkout, account_open_store_account, account_refresh,
+    account_start_login,
+};
 use commands::agent_commands::{
     agent_decide_approval, agent_detect_clis, agent_list_projects, agent_pending_approvals, agent_project_save_scenes,
     agent_project_snapshot, agent_start, agent_stop, video_work_dir,
@@ -53,6 +57,13 @@ pub fn run() {
             chatgpt_start,
             chatgpt_stop,
             open_external_url,
+            account_get,
+            account_start_login,
+            account_cancel_login,
+            account_logout,
+            account_refresh,
+            account_open_checkout,
+            account_open_store_account,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

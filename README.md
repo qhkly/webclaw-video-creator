@@ -38,6 +38,13 @@ node scripts/transcribe.mjs --input demo.mp4 --provider auto --options '{}'
 node scripts/cut-export.mjs --input demo.mp4 --ranges '[{"start":0,"end":3.6},{"start":6.2,"end":14.3}]' --output demo_cut.mp4
 ```
 
+## Account & Membership
+
+Sign-in uses the unified WebClaw account (auth.qhkly.com, PKCE public client with a loopback redirect); membership is
+read through the Video Creator account service and purchases open the WebClaw Store checkout. Payment never happens in
+the app. Feature gating ships disabled until pricing is decided. Contract, required server registrations and open
+product decisions: [docs/account-membership.md](docs/account-membership.md).
+
 ## Features
 
 - Script editor with manual scene splitting by blank lines

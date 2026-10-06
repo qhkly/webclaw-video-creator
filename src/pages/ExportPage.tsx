@@ -2,6 +2,7 @@ import { open } from '@tauri-apps/plugin-dialog';
 import { Clock3, FolderOpen, Layers3, Monitor, Play, RefreshCw } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import VoiceSelector from '../components/VoiceSelector';
+import { FeatureGateNotice, useGate } from '../components/AccountPanel';
 import { onRenderProgress, renderVideo, saveScenes } from '../lib/tauri-bridge';
 import { useVideoStore } from '../store/useVideoStore';
 import { useI18n } from '../i18n';
@@ -23,6 +24,8 @@ export default function ExportPage() {
   const [result, setResult] = useState('');
   const totalSeconds = scenes.reduce((total, scene) => total + scene.duration, 0);
   const running = progress.percent > 0 && progress.percent < 100;
+  const gate4k = useGate('export.4k');
+  const blocked = resolution === '4K' && !gate4k.allowed;
 
   useEffect(() => {
     let cleanup: (() => void) | undefined;
@@ -116,9 +119,10 @@ export default function ExportPage() {
           </div>
           <p className="progress-text">{progress.message}</p>
         </div>
+        {resolution === '4K' && <FeatureGateNotice access={gate4k.access} />}
         <button
           className="btn btn-primary btn-block export-cta"
-          disabled={!outputDir || running}
+          disabled={!outputDir || running || blocked}
           onClick={async () => {
             const scenesJson = await saveScenes({ scenes, outputDir });
             const output = await renderVideo({ scenesJson, outputDir, aspect, resolution, format, captionsJson: JSON.stringify(captions) });

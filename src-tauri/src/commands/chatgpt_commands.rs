@@ -284,18 +284,24 @@ pub async fn open_external_url(url: String) -> Result<(), String> {
     if !allowed_external_url(&url) {
         return Err("不允许打开该链接".to_string());
     }
+    launch_browser(&url)
+}
+
+/// Hand an https URL to the system browser. Callers own the allowlist: this only
+/// launches, it never decides what may be opened.
+pub(crate) fn launch_browser(url: &str) -> Result<(), String> {
     let mut command = if cfg!(target_os = "macos") {
         let mut command = std::process::Command::new("open");
-        command.arg(&url);
+        command.arg(url);
         command
     } else if cfg!(windows) {
         // No shell parsing involved (cmd /c start would treat & specially).
         let mut command = std::process::Command::new("rundll32");
-        command.arg("url.dll,FileProtocolHandler").arg(&url);
+        command.arg("url.dll,FileProtocolHandler").arg(url);
         command
     } else {
         let mut command = std::process::Command::new("xdg-open");
-        command.arg(&url);
+        command.arg(url);
         command
     };
     command
