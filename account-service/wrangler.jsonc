@@ -10,7 +10,7 @@
   "workers_dev": true,
   // Planned production domain. Enable only after the DNS zone has it (custom_domain
   // creates the record on deploy); until then the app must not point at it.
-  // "routes": [{ "pattern": "video-api.qhkly.com", "custom_domain": true }],
+  "routes": [{ "pattern": "video-api.qhkly.com", "custom_domain": true }],
 
   // Revocable app sessions. Create with:
   //   npx wrangler kv namespace create SESSIONS
