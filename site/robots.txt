@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://video.qhkly.com/sitemap.xml
+Sitemap: https://creator.qhkly.com/sitemap.xml

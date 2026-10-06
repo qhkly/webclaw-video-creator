@@ -27,7 +27,7 @@ plain `href` defaults so they work without JS; `site.js` re-points every
 `[data-link]` href, `[data-version]` span, and the canonical/`og:url` tags from
 the config. Before deploying:
 
-1. Replace the placeholder `siteUrl` (`https://video.qhkly.com`) with the real
+1. Replace the placeholder `siteUrl` (`https://creator.qhkly.com`) with the real
    domain — also update `robots.txt`, `sitemap.xml`, and the canonical/hreflang/
    OG/JSON-LD URLs in the four HTML heads.
 2. Keep `version` in sync with `src-tauri/tauri.conf.json`.

@@ -261,11 +261,11 @@ test('CORS: browsers are refused unless their origin is allowlisted', async () =
   assert.equal(foreign.status, 403);
   assert.equal(foreign.headers.get('Access-Control-Allow-Origin'), null);
 
-  env.ALLOWED_ORIGINS = 'https://video.qhkly.com';
-  const ok = await call('GET', '/healthz', { headers: { Origin: 'https://video.qhkly.com' } });
+  env.ALLOWED_ORIGINS = 'https://creator.qhkly.com';
+  const ok = await call('GET', '/healthz', { headers: { Origin: 'https://creator.qhkly.com' } });
   assert.equal(ok.status, 200);
-  assert.equal(ok.headers.get('Access-Control-Allow-Origin'), 'https://video.qhkly.com');
-  const preflight = await call('OPTIONS', '/v1/membership', { headers: { Origin: 'https://video.qhkly.com' } });
+  assert.equal(ok.headers.get('Access-Control-Allow-Origin'), 'https://creator.qhkly.com');
+  const preflight = await call('OPTIONS', '/v1/membership', { headers: { Origin: 'https://creator.qhkly.com' } });
   assert.equal(preflight.status, 204);
   assert.match(preflight.headers.get('Access-Control-Allow-Headers'), /Authorization/);
 

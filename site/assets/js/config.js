@@ -8,7 +8,7 @@
   window.WVC_CONFIG = {
     /* Official site origin. Placeholder until the domain is finalized —
        also drives canonical, hreflang, og:url and the JSON-LD url. */
-    siteUrl: 'https://video.qhkly.com',
+    siteUrl: 'https://creator.qhkly.com',
 
     /* Download: the release workflow (.github/workflows/release.yml) publishes
        installers for macOS (arm64 + Intel), Windows (x64) and Linux (x64 + arm64)
