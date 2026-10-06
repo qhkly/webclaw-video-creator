@@ -67,7 +67,15 @@ export async function loadOpenAIOAuthSdk() {
 export async function generateWithOpenAIOAuth({ prompt, size }) {
   const { createOpenAIOAuth, openaiCredentials, generateImage } = await loadOpenAIOAuthSdk();
   const openai = createOpenAIOAuth(openaiCredentials());
-  const { image } = await generateImage({ model: openai.image(OPENAI_OAUTH_IMAGE_MODEL), prompt, size, maxRetries: 1 });
+  const { image } = await generateImage({
+    model: openai.image(OPENAI_OAUTH_IMAGE_MODEL),
+    prompt,
+    size,
+    // One approval should trigger at most one paid/quota-consuming generation request.
+    maxRetries: 0,
+    // Do not let a stuck OAuth/backend request hold an MCP tool call indefinitely.
+    abortSignal: AbortSignal.timeout(180_000),
+  });
   return { bytes: image.uint8Array, mediaType: image.mediaType || 'image/png' };
 }
 
