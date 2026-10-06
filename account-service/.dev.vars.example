@@ -1,0 +1,2 @@
+# Copy to .dev.vars for `wrangler dev` (git-ignored). Never commit real values.
+STORE_CLIENT_SECRET=""

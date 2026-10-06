@@ -42,14 +42,18 @@ const CALLBACK_PATH: &str = "/auth/callback";
 const STORE_ORIGIN: &str = "https://store.qhkly.com";
 /// The store's product slug (webclaw-store lib/payment-products.ts).
 pub const PRODUCT_SLUG: &str = "webclaw-video-creator";
-/// Plans the in-app purchase entry offers. `trial` is not sold from the app.
-pub const CHECKOUT_PLANS: [&str; 2] = ["yearly", "lifetime"];
-/// TODO(service): the account service is not deployed yet. Release builds take its
-/// https base URL at compile time; until then membership shows "not available".
+/// Plans sold by the store (webclaw-store VIDEO_CREATOR_PRICES). The early placeholder
+/// plans (trial / yearly / lifetime) are retired; entitlements already granted on them
+/// still count as membership.
+pub const CHECKOUT_PLANS: [&str; 2] = ["pro-monthly", "pro-yearly"];
+/// Account service (account-service/, planned at https://video-api.qhkly.com). Release
+/// builds take its https base URL at compile time and only once it is actually live;
+/// without it membership shows "not available" and nothing is gated.
 const ACCOUNT_API_URL: Option<&str> = option_env!("VIDEO_CREATOR_ACCOUNT_API_URL");
-/// How long a cached "member" answer stays valid while the service is unreachable.
-/// Product decision (docs); it never overrides a definitive answer from the service.
-pub const OFFLINE_GRACE_SECS: u64 = 72 * 3600;
+/// How long a cached "member" answer survives when the service cannot be reached.
+/// The store contract is fail closed with at most ~60 s reuse of a positive answer
+/// (webclaw-store docs/billing-api.md); a longer offline grace is a product decision.
+pub const OFFLINE_GRACE_SECS: u64 = 60;
 const LOGIN_TIMEOUT: Duration = Duration::from_secs(5 * 60);
 /// Focus events arrive in bursts; the store asks for positive answers to be cached ≤ 60 s.
 const REFRESH_MIN_INTERVAL_SECS: u64 = 60;
@@ -116,6 +120,8 @@ pub struct Membership {
     pub renewal: Option<String>,
     pub expires_at: Option<String>,
     pub current_period_end: Option<String>,
+    /// Machine-readable member benefits (webclaw-store VIDEO_CREATOR_BENEFITS); null for non-members.
+    pub benefits: Option<Value>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -479,10 +485,12 @@ async fn renew_session(client: &reqwest::Client, api: &str, token: &str) -> Resu
     parse_session(&body)
 }
 
-async fn fetch_membership(client: &reqwest::Client, api: &str, token: &str) -> Result<Membership, ApiError> {
+/// `fresh` bypasses the service's short membership cache (manual refresh, after checkout).
+async fn fetch_membership(client: &reqwest::Client, api: &str, token: &str, fresh: bool) -> Result<Membership, ApiError> {
+    let fresh = if fresh { "&fresh=1" } else { "" };
     let body = send_json(
         client
-            .get(format!("{api}/v1/membership?product={PRODUCT_SLUG}"))
+            .get(format!("{api}/v1/membership?product={PRODUCT_SLUG}{fresh}"))
             .bearer_auth(token),
     )
     .await?;
@@ -772,7 +780,7 @@ async fn refresh_membership(app: &AppHandle, force: bool) {
                 Err(_) => {}
             }
         }
-        fetch_membership(&client, &api, &session.token).await
+        fetch_membership(&client, &api, &session.token, force).await
     }
     .await;
 
@@ -820,7 +828,7 @@ mod tests {
     use super::*;
 
     fn member(member: bool) -> Membership {
-        Membership { member, known: true, plan_slug: Some("yearly".into()), ..Membership::default() }
+        Membership { member, known: true, plan_slug: Some("pro-yearly".into()), ..Membership::default() }
     }
 
     #[test]
@@ -851,11 +859,12 @@ mod tests {
     #[test]
     fn checkout_url_only_for_offered_plans() {
         assert_eq!(
-            checkout_url(STORE_ORIGIN, "yearly").as_deref(),
-            Some("https://store.qhkly.com/checkout?product=webclaw-video-creator&plan=yearly")
+            checkout_url(STORE_ORIGIN, "pro-yearly").as_deref(),
+            Some("https://store.qhkly.com/checkout?product=webclaw-video-creator&plan=pro-yearly")
         );
-        assert!(checkout_url(STORE_ORIGIN, "lifetime").is_some());
-        for plan in ["trial", "", "yearly&product=other", "../admin"] {
+        assert!(checkout_url(STORE_ORIGIN, "pro-monthly").is_some());
+        // Retired placeholder plans are no longer sold.
+        for plan in ["trial", "yearly", "lifetime", "", "pro-yearly&product=other", "../admin"] {
             assert_eq!(checkout_url(STORE_ORIGIN, plan), None, "{plan}");
         }
     }
@@ -910,11 +919,13 @@ mod tests {
 
     #[test]
     fn membership_parsing_requires_explicit_member() {
-        let body = json!({"productSlug": PRODUCT_SLUG, "member": true, "known": true, "planSlug": "lifetime",
-            "status": "active", "renewal": "one_time", "expiresAt": null, "benefits": null});
+        let body = json!({"productSlug": PRODUCT_SLUG, "member": true, "known": true, "planSlug": "pro-yearly",
+            "status": "active", "renewal": "auto", "expiresAt": "2027-10-06T00:00:00.000Z",
+            "benefits": {"aiDirector": true, "maxExportHeight": 2160}});
         let parsed = parse_membership(&body).unwrap();
         assert!(parsed.member);
-        assert_eq!(parsed.plan_slug.as_deref(), Some("lifetime"));
+        assert_eq!(parsed.plan_slug.as_deref(), Some("pro-yearly"));
+        assert_eq!(parsed.benefits.as_ref().and_then(|b| b["maxExportHeight"].as_u64()), Some(2160));
         assert!(parse_membership(&json!({"member": "true"})).is_err());
         assert!(parse_membership(&json!({"active": true})).is_err());
         assert!(parse_session(&json!({"token": "t", "expiresAt": 0})).is_err());

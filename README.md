@@ -41,7 +41,8 @@ node scripts/cut-export.mjs --input demo.mp4 --ranges '[{"start":0,"end":3.6},{"
 ## Account & Membership
 
 Sign-in uses the unified WebClaw account (auth.qhkly.com, PKCE public client with a loopback redirect); membership is
-read through the Video Creator account service and purchases open the WebClaw Store checkout. Payment never happens in
+read through the Video Creator account service (a Cloudflare Worker in [`account-service/`](account-service/README.md),
+the only place that holds the store credential) and purchases open the WebClaw Store checkout. Payment never happens in
 the app. Feature gating ships disabled until pricing is decided. Contract, required server registrations and open
 product decisions: [docs/account-membership.md](docs/account-membership.md).
 

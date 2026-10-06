@@ -26,7 +26,7 @@ function account(patch = {}) {
     serviceConfigured: true,
     lastError: null,
     productSlug: 'webclaw-video-creator',
-    plans: ['yearly', 'lifetime'],
+    plans: ['pro-monthly', 'pro-yearly'],
     ...patch,
   };
 }
@@ -34,11 +34,12 @@ function account(patch = {}) {
 const membership = (patch = {}) => ({
   member: true,
   known: true,
-  planSlug: 'yearly',
+  planSlug: 'pro-yearly',
   status: 'active',
   renewal: 'auto',
   expiresAt: '2027-06-15T00:00:00.000Z',
   currentPeriodEnd: null,
+  benefits: { watermarkFree: true, maxExportHeight: 2160, aiDirector: true, aiCutCleanup: true, commercialUse: true },
   ...patch,
 });
 
@@ -68,6 +69,18 @@ test('enforced policy: sign in, upgrade, or unavailable — never a silent allow
   assert.equal(featureAccess(f, account({ user: null }), { enforce: true, paidFeatures: new Set() }), 'allowed');
 });
 
+test('enforced policy: gates read the store benefits, not just membership', () => {
+  const member = (benefits) => account({ entitled: true, membership: membership({ benefits }) });
+  assert.equal(featureAccess('export.4k', member({ maxExportHeight: 2160 }), enforced), 'allowed');
+  assert.equal(featureAccess('export.4k', member({ maxExportHeight: 1080 }), enforced), 'upgrade');
+  assert.equal(featureAccess('export.4k', member({ maxExportHeight: '2160' }), enforced), 'upgrade');
+  assert.equal(featureAccess('agent.director', member({ aiDirector: true }), enforced), 'allowed');
+  // Missing field or missing benefits = not granted.
+  assert.equal(featureAccess('agent.director', member({}), enforced), 'upgrade');
+  assert.equal(featureAccess('agent.director', member(null), enforced), 'upgrade');
+  assert.equal(featureAccess('agent.director', member({ aiDirector: 'yes' }), enforced), 'upgrade');
+});
+
 test('badge reflects plan and phase', () => {
   assert.equal(membershipBadge(null), 'checking');
   assert.equal(membershipBadge(account({ user: null, phase: 'signedOut' })), 'signedOut');
@@ -88,6 +101,10 @@ test('purchase entry: non-members, trials and cancelled subscriptions can buy', 
   assert.equal(canPurchase(account({ entitled: true, membership: membership() })), false);
   assert.equal(canPurchase(account({ entitled: true, membership: membership({ planSlug: 'trial' }) })), true);
   assert.equal(canPurchase(account({ entitled: true, membership: membership({ renewal: 'cancelled' }) })), true);
+  // WeChat Pay: one-time, expires, extended by paying again.
+  assert.equal(canPurchase(account({ entitled: true, membership: membership({ renewal: 'one_time' }) })), true);
+  // A permanent legacy lifetime grant needs nothing more.
+  assert.equal(canPurchase(account({ entitled: true, membership: membership({ planSlug: 'lifetime', renewal: 'one_time', expiresAt: null }) })), false);
 });
 
 test('display helpers', () => {

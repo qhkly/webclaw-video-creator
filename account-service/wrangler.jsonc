@@ -1,0 +1,36 @@
+// WebClaw Video Creator account service. Deployment: README.md in this directory.
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "webclaw-video-creator-account",
+  "main": "src/index.js",
+  "compatibility_date": "2025-08-01",
+  "observability": { "enabled": true },
+
+  // workers.dev stays on until the custom domain below is live.
+  "workers_dev": true,
+  // Planned production domain. Enable only after the DNS zone has it (custom_domain
+  // creates the record on deploy); until then the app must not point at it.
+  // "routes": [{ "pattern": "video-api.qhkly.com", "custom_domain": true }],
+
+  // Revocable app sessions. Create with:
+  //   npx wrangler kv namespace create SESSIONS
+  // and paste the id here (deploy fails until then, on purpose).
+  "kv_namespaces": [{ "binding": "SESSIONS", "id": "REPLACE_WITH_SESSIONS_KV_NAMESPACE_ID" }],
+
+  // Non-secret settings. The store credential is a secret:
+  //   npx wrangler secret put STORE_CLIENT_SECRET
+  "vars": {
+    "AUTH_JWT_PUBLIC_KEY_URL": "https://auth.qhkly.com/api/auth/public-key",
+    "AUTH_JWT_ISSUER": "auth.qhkly.com",
+    // Auth client id(s) of the desktop app — not the store slug.
+    "AUTH_AUDIENCES": "video-creator",
+    "STORE_BASE_URL": "https://store.qhkly.com",
+    // id of the store's BILLING_CLIENTS_VIDEO_CREATOR entry (read:entitlements, webclaw-video-creator only)
+    "STORE_CLIENT_ID": "webclaw-video-creator",
+    "PRODUCT_SLUG": "webclaw-video-creator",
+    "SESSION_TTL_SECONDS": "604800",
+    "SESSION_MAX_AGE_SECONDS": "2592000",
+    // Exact https origins allowed to call from a browser. Empty: native app only.
+    "ALLOWED_ORIGINS": ""
+  }
+}
