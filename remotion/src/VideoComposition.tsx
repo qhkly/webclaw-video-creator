@@ -10,14 +10,17 @@ import ImageFrame from './compositions/ImageFrame';
 import Quote from './compositions/Quote';
 import TitleSlide from './compositions/TitleSlide';
 import { mediaSrc } from './media';
+import { Watermark } from './Watermark';
 
 interface Props {
   scenes?: VideoScene[];
   aspect?: Aspect;
   captions?: CaptionSettings;
+  /** Free plan: burn the product watermark into every frame (scripts/lib/plan.mjs). */
+  watermark?: boolean;
 }
 
-export function VideoComposition({ scenes = [], captions }: Props) {
+export function VideoComposition({ scenes = [], captions, watermark = false }: Props) {
   const { fps } = useVideoConfig();
   let from = 0;
 
@@ -35,6 +38,7 @@ export function VideoComposition({ scenes = [], captions }: Props) {
         );
       })}
       <Captions scenes={scenes} settings={captions} />
+      {watermark && <Watermark />}
     </AbsoluteFill>
   );
 }

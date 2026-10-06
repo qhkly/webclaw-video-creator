@@ -1,21 +1,27 @@
 #!/usr/bin/env node
 // Export an edited cut: keep only the given source-time ranges and concatenate them with FFmpeg.
 //
-//   node scripts/cut-export.mjs --input in.mp4 --ranges '[{"start":0,"end":3.2},…]' --output out.mp4
+//   node scripts/cut-export.mjs --input in.mp4 --ranges '[{"start":0,"end":3.2},…]' --output out.mp4 [--maxHeight 2160 --watermark 0]
 //
 // `--ranges` accepts inline JSON or a path to a JSON file. Progress is emitted as JSON lines.
+// Plan limits (scripts/lib/plan.mjs) default to the free plan: short side ≤ 720 px and the
+// WebClaw Video Creator watermark burned into the video. The app passes Pro limits explicitly.
 import { existsSync } from 'node:fs';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, extname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { buildCutFilter, normalizeRanges } from './lib/cut-filter.mjs';
 import { emit, fail, findFfmpeg, parseArgs, probeMedia, run } from './lib/media.mjs';
+import { WATERMARK_ASSET, fitShortSide, limitsFromArgs, watermarkBox } from './lib/plan.mjs';
+
+const WATERMARK_PATH = join(dirname(fileURLToPath(import.meta.url)), 'assets', WATERMARK_ASSET.file);
 
 const args = parseArgs(process.argv.slice(2));
 
 try {
   const output = await exportCut();
-  emit({ type: 'done', output });
+  emit({ type: 'done', ...output });
 } catch (error) {
   fail(error instanceof Error ? error.message : String(error));
 }
@@ -45,10 +51,25 @@ async function exportCut() {
   }
   const outputDuration = ranges.reduce((total, range) => total + range.end - range.start, 0);
 
+  const limits = limitsFromArgs(args);
+  let scale = null;
+  let watermark = null;
+  let frame = null;
+  if (media.hasVideo) {
+    scale = fitShortSide(media.width, media.height, limits.maxExportHeight);
+    frame = scale ?? { width: media.width, height: media.height };
+    if (limits.watermark) {
+      if (!existsSync(WATERMARK_PATH)) {
+        throw new Error(`水印素材缺失：${WATERMARK_PATH}`);
+      }
+      watermark = watermarkBox(frame.width, frame.height);
+    }
+  }
+
   await mkdir(dirname(output), { recursive: true });
   const tempDir = await mkdtemp(join(tmpdir(), 'webclaw-cut-'));
   const filterPath = join(tempDir, 'filter.txt');
-  await writeFile(filterPath, buildCutFilter(ranges, media));
+  await writeFile(filterPath, buildCutFilter(ranges, media, { scale, watermark }));
   emit({ type: 'progress', percent: 1, message: `开始导出 ${ranges.length} 个片段…` });
 
   const ext = extname(output).toLowerCase();
@@ -61,7 +82,15 @@ async function exportCut() {
   try {
     const { code, stderr } = await run(
       ffmpeg,
-      ['-y', '-hide_banner', '-nostats', '-i', input, '-filter_complex_script', filterPath, ...mapArgs, ...codecArgs, '-progress', 'pipe:1', output],
+      [
+        '-y', '-hide_banner', '-nostats',
+        '-i', input,
+        // A single still frame: overlay repeats it for the whole video (eof_action=repeat).
+        ...(watermark ? ['-i', WATERMARK_PATH] : []),
+        '-filter_complex_script', filterPath,
+        ...mapArgs, ...codecArgs,
+        '-progress', 'pipe:1', output,
+      ],
       {
         onStdoutLine: (line) => {
           const match = line.match(/^out_time_(?:us|ms)=(\d+)/);
@@ -81,5 +110,11 @@ async function exportCut() {
     await rm(tempDir, { recursive: true, force: true });
   }
   emit({ type: 'progress', percent: 100, message: '导出完成' });
-  return output;
+  return {
+    output,
+    width: frame?.width ?? null,
+    height: frame?.height ?? null,
+    watermark: Boolean(watermark),
+    maxExportHeight: limits.maxExportHeight,
+  };
 }

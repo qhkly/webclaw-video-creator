@@ -1,9 +1,14 @@
 #!/usr/bin/env node
+// Render scenes.json with the Remotion templates.
+// Plan limits (scripts/lib/plan.mjs) default to the free plan: the resolution is clamped to
+// 720p and the WebClaw Video Creator watermark is rendered into every frame. The app passes
+// Pro limits explicitly (--maxHeight 2160 --watermark 0).
 import { mkdir, readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { bundle } from '@remotion/bundler';
 import { renderMedia, selectComposition } from '@remotion/renderer';
 import { stageSceneMedia } from './lib/stage-media.mjs';
+import { clampResolution, limitsFromArgs } from './lib/plan.mjs';
 
 const RESOLUTION_SCALE = { '720p': 2 / 3, '1080p': 1, '4K': 2 };
 const FORMAT_CODEC = { MP4: 'h264', MOV: 'prores', WebM: 'vp8' };
@@ -15,8 +20,9 @@ const outputDir = resolve(args.outputDir || 'dist-video');
 const format = args.format || 'MP4';
 const output = resolve(args.output || `${outputDir}/raw_video.${FORMAT_EXT[format] ?? 'mp4'}`);
 const aspect = args.aspect || '16:9';
-const resolution = args.resolution || '1080p';
-const inputProps = { scenes: [], aspect };
+const limits = limitsFromArgs(args);
+const resolution = clampResolution(args.resolution || '1080p', limits.maxExportHeight);
+const inputProps = { scenes: [], aspect, watermark: limits.watermark };
 
 if (!args.scenes) {
   fail('Missing --scenes');
@@ -54,7 +60,7 @@ await renderMedia({
   },
 });
 
-console.log(JSON.stringify({ type: 'done', output }));
+console.log(JSON.stringify({ type: 'done', output, resolution, watermark: limits.watermark }));
 
 function parseArgs(argv) {
   const parsed = {};

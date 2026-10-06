@@ -8,6 +8,7 @@ type CompositionProps = {
   scenes?: VideoScene[];
   aspect?: Aspect;
   captions?: CaptionSettings;
+  watermark?: boolean;
 };
 
 export function Root() {

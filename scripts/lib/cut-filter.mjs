@@ -31,8 +31,14 @@ export function normalizeRanges(ranges, duration) {
 
 const ts = (value) => Number(value.toFixed(3)).toString();
 
-/** Build a filter_complex script producing [outv] and/or [outa]. */
-export function buildCutFilter(ranges, { hasVideo = true, hasAudio = true } = {}) {
+/**
+ * Build a filter_complex script producing [outv] and/or [outa].
+ *
+ * Plan limits act on the encoded video itself: `scale` ({width, height}) downsizes the
+ * concatenated video, `watermark` ({width, height, x, y}) overlays input 1 (the watermark
+ * PNG) on it. Both are null when the plan has no such limit.
+ */
+export function buildCutFilter(ranges, { hasVideo = true, hasAudio = true } = {}, { scale = null, watermark = null } = {}) {
   const count = ranges.length;
   const lines = [];
   if (hasVideo) {
@@ -56,7 +62,16 @@ export function buildCutFilter(ranges, { hasVideo = true, hasAudio = true } = {}
     }
   });
   const inputs = ranges.map((_, i) => `${hasVideo ? `[v${i}]` : ''}${hasAudio ? `[a${i}]` : ''}`).join('');
-  const outputs = `${hasVideo ? '[outv]' : ''}${hasAudio ? '[outa]' : ''}`;
+  const post = hasVideo && (scale || watermark);
+  const outputs = `${hasVideo ? (post ? '[catv]' : '[outv]') : ''}${hasAudio ? '[outa]' : ''}`;
   lines.push(`${inputs}concat=n=${count}:v=${hasVideo ? 1 : 0}:a=${hasAudio ? 1 : 0}${outputs}`);
+  if (post) {
+    const scaled = watermark ? '[scaledv]' : '[outv]';
+    lines.push(scale ? `[catv]scale=${scale.width}:${scale.height}:flags=lanczos,setsar=1${scaled}` : `[catv]null${scaled}`);
+    if (watermark) {
+      lines.push(`[1:v]scale=${watermark.width}:${watermark.height},format=rgba[wm]`);
+      lines.push(`[scaledv][wm]overlay=x=${watermark.x}:y=${watermark.y}:format=auto[outv]`);
+    }
+  }
   return `${lines.join(';\n')}\n`;
 }
