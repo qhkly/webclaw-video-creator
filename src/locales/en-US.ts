@@ -237,15 +237,12 @@ const enUS: typeof zhCN = {
       commercialUse: 'Commercial use',
       commercialYes: 'Allowed',
       commercialNo: 'Personal use only',
-      yes: 'Included',
-      no: 'Pro only',
+      ownCost: 'Included on every plan (uses your own Claude Code / Codex / ChatGPT)',
+      local: 'Included on every plan (runs on this computer)',
     },
     freeExportNote: 'Free plan: exports up to 720p with a WebClaw Video Creator watermark. Pro exports up to 4K without a watermark.',
     proOnly: {
       resolution: 'Higher resolutions are a Pro feature',
-      cleanup: 'AI cleanup (filler words, long pauses) is a Pro feature; manual editing is unaffected',
-      director: 'AI Director is a Pro feature',
-      chatgpt: 'Letting ChatGPT drive the video tools (AI Director) is a Pro feature; on the free plan tool calls are refused',
     },
     gate: {
       signIn: 'Sign in to use this feature',

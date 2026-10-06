@@ -6,7 +6,7 @@ import { test } from 'node:test';
 import { approvalFromEnv, needsApproval } from '../mcp/approval.mjs';
 import { createContext } from '../mcp/context.mjs';
 import { createMcpServer } from '../mcp/protocol.mjs';
-const PRO_PLAN = { maxExportHeight: 2160, watermark: false, aiDirector: true, aiCutCleanup: true, commercialUse: true };
+const PRO_PLAN = { maxExportHeight: 2160, watermark: false, commercialUse: true };
 import { tools } from '../mcp/tools.mjs';
 import { parseAgentLine } from '../src/lib/agent-events.ts';
 

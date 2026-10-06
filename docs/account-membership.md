@@ -94,13 +94,19 @@ App ──打开浏览器──▶ store.qhkly.com/checkout?product=webclaw-vide
 
 ## 免费版 / Pro 与门控
 
+**原则：谁承担成本决定门控。** 用户自带额度或用户自己机器承担成本的能力（自己已登录的 Claude Code / Codex、
+自己的 ChatGPT 图片额度（Codex OAuth）、自己配置的 API Key、本机 Remotion / FFmpeg / 本地启发式）对免费版
+完全开放，也不要求登录。只有 WebClaw 代付成本的能力（以后的平台托管 AI / 语音 / 素材等）和高级产出
+（高分辨率、去水印）才要求 Pro。
+
 | 能力 | 免费版 | Pro（store `benefits`） |
 |---|---|---|
 | 手工文字剪辑、场景编辑、预览 | 可用 | 可用 |
 | 导出分辨率（短边） | 最高 720p | `maxExportHeight`（4K = 2160） |
 | 水印 | 必带 WebClaw Video Creator 水印 | `watermarkFree: true` 时无 |
-| AI 导演（Agent CLI、ChatGPT 调用视频工具） | 不可用 | `aiDirector: true` |
-| 文字剪辑 AI 一键清理（去语气词、删长停顿） | 不可用 | `aiCutCleanup: true` |
+| AI 导演（Agent CLI、ChatGPT 调用视频工具） | 可用，无需登录（推理用用户自己的 Claude Code / Codex / ChatGPT） | 可用 |
+| AI 生图 `video_image_generate`（Codex/ChatGPT OAuth） | 可用，消耗用户自己的图片额度，每次调用都需确认 | 同左 |
+| 文字剪辑 AI 一键清理（去语气词、删长停顿） | 可用（本机启发式；转写用本地 / 用户自己的 Key） | 可用 |
 | 商用授权 | 仅个人使用 | `commercialUse: true`（只做展示，见下） |
 
 **判定只有一处**：Rust `limits_for(entitled, membership)`。未登录、非会员、会话过期、服务不可用超过 60 秒宽限、
@@ -113,9 +119,13 @@ App ──打开浏览器──▶ store.qhkly.com/checkout?product=webclaw-vide
 |---|---|---|
 | 场景渲染分辨率 + 水印 | `render_video`（Rust）→ `scripts/render.mjs`（Remotion） | Rust 按套餐钳制 `--resolution`，传 `--maxHeight` / `--watermark`；`render.mjs` 缺参数时默认免费版，再钳制一次；水印是 Remotion 合成里的一层（`remotion/src/Watermark.tsx`），渲进每一帧 |
 | 文字剪辑导出分辨率 + 水印 | `export_cut`（Rust）→ `scripts/cut-export.mjs`（FFmpeg） | 同上传参；FFmpeg 在 concat 之后 `scale` 到短边 ≤ 限制，再用 `overlay` 叠 `scripts/assets/watermark.png`（不依赖系统字体） |
-| AI 导演：Agent | `agent_start`（Rust） | 没有 `aiDirector` 直接拒绝启动 |
-| AI 导演：MCP 工具（Agent CLI、ChatGPT 隧道） | `mcp/protocol.mjs` 的每一次 `tools/call` | 读 Rust 写的 `<app config>/entitlement.json`（`VIDEO_CREATOR_ENTITLEMENT_FILE`，15 分钟过期，后台每 5 分钟刷新会员并重写）；没有文件、过期、格式不对或 `aiDirector` 不是 `true` → 拒绝调用。`tools/list` 仍开放；`video_render` 也把套餐限制传给 `render.mjs` |
-| AI 一键清理 | `CutterPage` 的 `applySuggestion` | 这是纯前端的本地启发式，结果就是普通的剪切区间，命令层无法区分它和手工剪辑，所以门控在前端（按钮禁用 + 函数内检查）。这是它唯一的真实执行点 |
+| MCP 工具的套餐限制（Agent CLI、ChatGPT 隧道） | `mcp/protocol.mjs` 的每一次 `tools/call` | 读 Rust 写的 `<app config>/entitlement.json`（`VIDEO_CREATOR_ENTITLEMENT_FILE`，15 分钟过期，后台每 5 分钟刷新会员并重写）；没有文件、过期或格式不对 → 免费版限制，**但工具照常可用**。`video_render` 把限制传给 `render.mjs`（720p + 水印）。目前没有任何工具要求 Pro |
+| 用户额度确认（`cost: 'paid'`） | `mcp/approval.mjs` | `cost` 只是审批语义：`paid` = 消耗用户自己的额度（如 `video_image_generate`），每次调用都要用户确认，与 WebClaw 套餐无关 |
+
+**扩展点。** 以后接入 WebClaw 代付的能力时：前端功能加进 `src/lib/membership.ts` 的 `PAID_FEATURES`
+并对应一个套餐限制；MCP 工具声明 `planFeature: '<限制字段>'`，`protocol.mjs` 在该字段不为 `true` 时返回
+`PRO_REQUIRED_MESSAGE`。用户自带成本的能力放在 `OWN_COST_FEATURES`，不加 `planFeature`。store 仍可能下发
+`aiDirector` / `aiCutCleanup` 权益，App 会忽略。
 | 商用授权 | 无 | 架构里没有可执行的技术点，只在「账户与会员」展示，不虚构限制 |
 
 预览（Remotion Player）对免费版同样显示水印，所见即所得。

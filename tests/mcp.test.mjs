@@ -5,8 +5,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { APP_ROOT, createContext, findFfmpeg, run } from '../mcp/context.mjs';
-import { createMcpServer } from '../mcp/protocol.mjs';
-const PRO_PLAN = { maxExportHeight: 2160, watermark: false, aiDirector: true, aiCutCleanup: true, commercialUse: true };
+import { createMcpServer, PRO_REQUIRED_MESSAGE } from '../mcp/protocol.mjs';
+import { FREE_LIMITS } from '../scripts/lib/plan.mjs';
+const PRO_PLAN = { maxExportHeight: 2160, watermark: false, commercialUse: true };
 import { providerIds } from '../mcp/providers.mjs';
 import { buildMuxArgs, parseProbe, tools, withFileLock } from '../mcp/tools.mjs';
 
@@ -295,20 +296,50 @@ test('stdio transport: an MCP client can initialize and list tools', async () =>
   assert.equal(responses.length, 3, 'notifications must not produce responses');
 });
 
-test('AI Director gate: without a live Pro entitlement every tool call is refused, listing still works', async () => {
-  const free = { ...PRO_PLAN, aiDirector: false };
+test('free plan regression: basic video tools run without sign-in, membership or a live entitlement', async () => {
+  // Regression: a free install used to get "AI Director is a Pro feature" on the very first
+  // video_project_status call, so an agent never reached generation or rendering.
+  const SAVE_CALL = { jsonrpc: '2.0', id: 5, method: 'tools/call', params: { name: 'video_scenes_save', arguments: { project: 'demo', scenes: [{ id: 's1', title: 'T', text: '', narration: 'n', template: 'TitleSlide', duration: 3, props: {} }] } } };
+  const PROVIDERS_CALL = { jsonrpc: '2.0', id: 4, method: 'tools/call', params: { name: 'video_providers_list', arguments: {} } };
   const cases = {
-    'no entitlement file': {},
+    'no entitlement file (signed out / membership lookup failed)': {},
     'missing file': { VIDEO_CREATOR_ENTITLEMENT_FILE: join(tmpdir(), 'vc-no-such-entitlement.json') },
-    'expired Pro file': { VIDEO_CREATOR_ENTITLEMENT_FILE: await entitlementFile(PRO_PLAN, Date.now() - 1) },
-    'free plan file': { VIDEO_CREATOR_ENTITLEMENT_FILE: await entitlementFile(free) },
-    'aiDirector not a boolean': { VIDEO_CREATOR_ENTITLEMENT_FILE: await entitlementFile({ ...PRO_PLAN, aiDirector: 'true' }) },
+    'expired file': { VIDEO_CREATOR_ENTITLEMENT_FILE: await entitlementFile(PRO_PLAN, Date.now() - 1) },
+    'free plan file': { VIDEO_CREATOR_ENTITLEMENT_FILE: await entitlementFile(FREE_LIMITS) },
+    'old free file with aiDirector: false': { VIDEO_CREATOR_ENTITLEMENT_FILE: await entitlementFile({ ...FREE_LIMITS, aiDirector: false, aiCutCleanup: false }) },
   };
   for (const [label, env] of Object.entries(cases)) {
-    const { code, byId } = await stdioSession([{ jsonrpc: '2.0', id: 2, method: 'tools/list' }, STATUS_CALL], env);
+    const { code, workspace, byId } = await stdioSession([{ jsonrpc: '2.0', id: 2, method: 'tools/list' }, STATUS_CALL, PROVIDERS_CALL, SAVE_CALL], env);
     assert.equal(code, 0, label);
     assert.ok(byId[2].result.tools.length >= 5, label);
-    assert.equal(byId[3].result.isError, true, label);
-    assert.match(byId[3].result.content[0].text, /Pro/, label);
+    for (const callId of [3, 4, 5]) {
+      assert.equal(byId[callId].result.isError, undefined, `${label} / call ${callId}: ${byId[callId].result.content[0].text}`);
+      assert.doesNotMatch(byId[callId].result.content[0].text, /Pro feature|PRO_REQUIRED|needs WebClaw Video Creator Pro/, label);
+    }
+    assert.equal(byId[3].result.structuredContent.workspace, workspace, label);
+    assert.ok(Array.isArray(byId[4].result.structuredContent.providers), label);
   }
+});
+
+test('no shipped tool requires a WebClaw plan; only a tool declaring planFeature is gated', async () => {
+  assert.deepEqual(tools.filter((tool) => tool.planFeature).map((tool) => tool.name), []);
+  const hosted = {
+    name: 'video_hosted_test',
+    title: 'Hosted (WebClaw-paid) test tool',
+    description: 'test',
+    cost: 'paid',
+    planFeature: 'hostedTest',
+    inputSchema: { type: 'object', properties: {} },
+    annotations: {},
+    handler: async () => ({ ok: true }),
+  };
+  const ctx = createContext({ workspace: await mkdtemp(join(tmpdir(), 'vc-mcp-plan-')) });
+  const call = (readPlan) => createMcpServer({ tools: [hosted], ctx, readPlan })
+    .handle({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: hosted.name, arguments: {} } })
+    .then((response) => response.result);
+  const refused = await call(async () => FREE_LIMITS);
+  assert.equal(refused.isError, true);
+  assert.equal(refused.content[0].text, PRO_REQUIRED_MESSAGE);
+  assert.equal((await call(async () => ({ ...PRO_PLAN, hostedTest: 'true' }))).isError, true, 'only boolean true counts');
+  assert.deepEqual((await call(async () => ({ ...PRO_PLAN, hostedTest: true }))).structuredContent, { ok: true });
 });

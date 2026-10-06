@@ -7,14 +7,17 @@
 //     (VIDEO_CREATOR_ENTITLEMENT_FILE).
 // Everything here fails closed: a missing argument, file, field or a stale file
 // means the free plan. Contract: docs/account-membership.md.
+//
+// Only capabilities WebClaw pays for or premium output are limited here. Anything
+// the user pays for themselves (their own agent CLI / ChatGPT login and quota, their
+// own API keys, this machine's CPU/GPU) is not a plan limit: AI Director, AI cleanup
+// and image generation via the user's ChatGPT OAuth are open on the free plan.
 import { readFile } from 'node:fs/promises';
 
 export const FREE_LIMITS = Object.freeze({
   /** Short side of the exported frame, in pixels (the app's "720p" preset). */
   maxExportHeight: 720,
   watermark: true,
-  aiDirector: false,
-  aiCutCleanup: false,
   commercialUse: false,
 });
 
@@ -34,8 +37,6 @@ export function sanitizeLimits(raw) {
   return {
     maxExportHeight: clampHeight(raw.maxExportHeight),
     watermark: raw.watermark !== false,
-    aiDirector: raw.aiDirector === true,
-    aiCutCleanup: raw.aiCutCleanup === true,
     commercialUse: raw.commercialUse === true,
   };
 }

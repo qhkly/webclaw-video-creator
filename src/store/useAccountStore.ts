@@ -9,7 +9,7 @@ import {
   type AccountView,
   type CheckoutPlan,
   type FeatureAccess,
-  type PaidFeature,
+  type Feature,
   type PlanLimits,
 } from '../lib/membership';
 
@@ -136,6 +136,6 @@ export function usePlanLimits(): PlanLimits {
   return useMemo(() => planLimits(account), [account]);
 }
 
-export function useFeatureAccess(feature: PaidFeature): FeatureAccess {
+export function useFeatureAccess(feature: Feature): FeatureAccess {
   return useAccountStore((state) => featureAccess(feature, state.account));
 }

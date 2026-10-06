@@ -15,12 +15,12 @@ import {
   watermarkBox,
 } from '../scripts/lib/plan.mjs';
 
-const PRO = { maxExportHeight: 2160, watermark: false, aiDirector: true, aiCutCleanup: true, commercialUse: true };
+const PRO = { maxExportHeight: 2160, watermark: false, commercialUse: true };
 
 test('sanitizeLimits fails closed field by field', () => {
   assert.deepEqual(sanitizeLimits(PRO), PRO);
   for (const raw of [null, undefined, 'pro', [], 42]) assert.deepEqual(sanitizeLimits(raw), FREE_LIMITS);
-  assert.deepEqual(sanitizeLimits({ maxExportHeight: '2160', watermark: 'false', aiDirector: 'true', aiCutCleanup: 1 }), FREE_LIMITS);
+  assert.deepEqual(sanitizeLimits({ maxExportHeight: '2160', watermark: 'false', commercialUse: 1 }), FREE_LIMITS);
   assert.equal(sanitizeLimits({ maxExportHeight: 99999 }).maxExportHeight, 2160);
   assert.equal(sanitizeLimits({ maxExportHeight: 10 }).maxExportHeight, 720);
   assert.equal(sanitizeLimits({ maxExportHeight: 1080.5 }).maxExportHeight, 720);

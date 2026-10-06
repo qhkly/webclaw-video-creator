@@ -21,7 +21,9 @@ export interface VideoCreatorBenefits {
   watermarkFree?: boolean;
   /** Export height limit in pixels; 2160 = 4K. */
   maxExportHeight?: number;
+  /** Still sent by the store; ignored since the AI Director runs on the user's own CLI. */
   aiDirector?: boolean;
+  /** Still sent by the store; ignored since AI cleanup is a local heuristic. */
   aiCutCleanup?: boolean;
   commercialUse?: boolean;
 }
@@ -50,8 +52,6 @@ export interface PlanLimits {
   /** Short side of the exported frame in pixels: 720 (free) … 2160 (4K). */
   maxExportHeight: number;
   watermark: boolean;
-  aiDirector: boolean;
-  aiCutCleanup: boolean;
   /** Licensing only; nothing technical depends on it. */
   commercialUse: boolean;
 }
@@ -59,8 +59,6 @@ export interface PlanLimits {
 export const FREE_LIMITS: Readonly<PlanLimits> = Object.freeze({
   maxExportHeight: 720,
   watermark: true,
-  aiDirector: false,
-  aiCutCleanup: false,
   commercialUse: false,
 });
 
@@ -88,30 +86,41 @@ export function planLimits(account: AccountView | null | undefined): PlanLimits 
   return {
     maxExportHeight: Number.isInteger(height) ? Math.min(2160, Math.max(720, height)) : 720,
     watermark: raw.watermark !== false,
-    aiDirector: raw.aiDirector === true,
-    aiCutCleanup: raw.aiCutCleanup === true,
     commercialUse: raw.commercialUse === true,
   };
 }
 
-/** Pro-only capabilities. Free keeps manual editing, preview and 720p watermarked export. */
-export const PAID_FEATURES = ['agent.director', 'cutter.aiCleanup', 'export.1080p', 'export.4k', 'export.noWatermark'] as const;
+/**
+ * Gating rule: who pays decides.
+ *
+ * - Own-cost features run on what the user already pays for: their own agent CLI login and plan
+ *   (Claude Code / Codex), their own ChatGPT image quota (OAuth), their own API keys, or this
+ *   machine's CPU/GPU (Remotion, FFmpeg, local heuristics). They are open on every plan, signed in
+ *   or not. Spending the user's own quota still asks for approval per call (MCP tool `cost`), which
+ *   is a consent step, not a plan requirement.
+ * - Paid features are premium output or something WebClaw pays for (a platform-hosted provider).
+ *   Only these need Pro. A new WebClaw-paid capability goes here, with a plan limit behind it.
+ */
+export const OWN_COST_FEATURES = ['agent.director', 'cutter.aiCleanup'] as const;
+export const PAID_FEATURES = ['export.1080p', 'export.4k', 'export.noWatermark'] as const;
+export type OwnCostFeature = (typeof OWN_COST_FEATURES)[number];
 export type PaidFeature = (typeof PAID_FEATURES)[number];
+export type Feature = OwnCostFeature | PaidFeature;
 
 export interface MembershipPolicy {
   enforce: boolean;
-  paidFeatures: ReadonlySet<PaidFeature>;
+  paidFeatures: ReadonlySet<Feature>;
 }
 
 export const MEMBERSHIP_POLICY: MembershipPolicy = {
   enforce: true,
-  paidFeatures: new Set<PaidFeature>(PAID_FEATURES),
+  paidFeatures: new Set<Feature>(PAID_FEATURES),
 };
 
 /** Which plan limit each feature needs. */
-const FEATURE_ALLOWED: Record<PaidFeature, (limits: PlanLimits) => boolean> = {
-  'agent.director': (l) => l.aiDirector,
-  'cutter.aiCleanup': (l) => l.aiCutCleanup,
+const FEATURE_ALLOWED: Record<Feature, (limits: PlanLimits) => boolean> = {
+  'agent.director': () => true,
+  'cutter.aiCleanup': () => true,
   'export.1080p': (l) => l.maxExportHeight >= 1080,
   'export.4k': (l) => l.maxExportHeight >= 2160,
   'export.noWatermark': (l) => !l.watermark,
@@ -127,7 +136,7 @@ export function allowsResolution(limits: PlanLimits, resolution: keyof typeof RE
 /** allowed | signIn: needs an account | upgrade: needs membership | unavailable: can't tell right now. */
 export type FeatureAccess = 'allowed' | 'signIn' | 'upgrade' | 'unavailable';
 
-export function featureAccess(feature: PaidFeature, account: AccountView | null, policy: MembershipPolicy = MEMBERSHIP_POLICY): FeatureAccess {
+export function featureAccess(feature: Feature, account: AccountView | null, policy: MembershipPolicy = MEMBERSHIP_POLICY): FeatureAccess {
   if (!policy.enforce || !policy.paidFeatures.has(feature)) return 'allowed';
   if (FEATURE_ALLOWED[feature](planLimits(account))) return 'allowed';
   if (!account) return 'unavailable';

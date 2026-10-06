@@ -203,7 +203,8 @@ export const tools = [
   },
   {
     name: 'video_image_generate',
-    // Spends the user's ChatGPT image quota, so it always goes through approval.
+    // Spends the user's own ChatGPT image quota: always goes through approval, but needs no
+    // WebClaw plan (no planFeature) since WebClaw pays nothing for it.
     cost: 'paid',
     title: 'Generate image',
     description:

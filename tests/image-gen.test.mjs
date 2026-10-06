@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readdir, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
@@ -7,7 +7,8 @@ import { needsApproval } from '../mcp/approval.mjs';
 import { createContext, findFfmpeg, run } from '../mcp/context.mjs';
 import { checkOpenAIOAuthImage, normalizeImage, readPngSize } from '../mcp/image-gen.mjs';
 import { createMcpServer } from '../mcp/protocol.mjs';
-const PRO_PLAN = { maxExportHeight: 2160, watermark: false, aiDirector: true, aiCutCleanup: true, commercialUse: true };
+import { FREE_LIMITS } from '../scripts/lib/plan.mjs';
+const PRO_PLAN = { maxExportHeight: 2160, watermark: false, commercialUse: true };
 import { listProviders } from '../mcp/providers.mjs';
 import { tools } from '../mcp/tools.mjs';
 import { stageSceneMedia } from '../scripts/lib/stage-media.mjs';
@@ -108,6 +109,50 @@ test('video_image_generate writes a normalized PNG into project assets and attac
   const missing = await call('video_image_generate', { project: 'demo', prompt: 'x', sceneId: 'nope' });
   assert.equal(missing.isError, true);
   assert.equal(requests.length, 2, 'unknown scene fails before spending quota');
+});
+
+test('free plan: OAuth image generation needs no WebClaw Pro, but still asks for approval every call', async () => {
+  const tool = tools.find((item) => item.name === 'video_image_generate');
+  assert.equal(tool.planFeature, undefined, 'the user\'s own ChatGPT quota is not a WebClaw plan feature');
+
+  const workspace = await mkdtemp(join(tmpdir(), 'vc-image-free-'));
+  const dir = join(workspace, 'approvals');
+  const requests = [];
+  const bytes = await pngBytes(1024, 1024);
+  const ctx = Object.assign(createContext({ workspace }), {
+    generateImage: async (request) => {
+      requests.push(request);
+      return { bytes, mediaType: 'image/png' };
+    },
+  });
+  // Free limits; "auto" mode still confirms paid (own-quota) tools.
+  const server = createMcpServer({ tools, ctx, approval: { dir, mode: 'auto', timeoutMs: 3000, pollMs: 20 }, readPlan: async () => FREE_LIMITS });
+  let id = 0;
+  const call = (name, args) => server.handle({ jsonrpc: '2.0', id: ++id, method: 'tools/call', params: { name, arguments: args } }).then((r) => r.result);
+  const answer = async (allow) => {
+    for (let attempt = 0; attempt < 150; attempt += 1) {
+      const pending = (await readdir(dir).catch(() => [])).filter((name) => name.endsWith('.request.json'));
+      if (pending.length > 0) {
+        const request = JSON.parse(await readFile(join(dir, pending[0]), 'utf8'));
+        await writeFile(join(dir, pending[0].replace('.request.json', '.decision.json')), JSON.stringify({ allow }));
+        return request;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+    throw new Error('no approval request appeared');
+  };
+
+  const [declined, declinedRequest] = await Promise.all([call('video_image_generate', { project: 'demo', prompt: 'no' }), answer(false)]);
+  assert.equal(declined.isError, true);
+  assert.doesNotMatch(declined.content[0].text, /Pro/);
+  assert.match(declined.content[0].text, /declined/);
+  assert.deepEqual([declinedRequest.tool, declinedRequest.cost], ['video_image_generate', 'paid']);
+  assert.equal(requests.length, 0, 'nothing is generated without approval');
+
+  const [allowed] = await Promise.all([call('video_image_generate', { project: 'demo', prompt: 'yes', filename: 'free' }), answer(true)]);
+  assert.equal(allowed.isError, undefined, allowed.content[0].text);
+  assert.equal(allowed.structuredContent.path, join(workspace, 'projects', 'demo', 'assets', 'free.png'));
+  assert.equal(requests.length, 1);
 });
 
 test('render staging moves ImageFrame imageSrc into publicDir', async () => {

@@ -1,7 +1,7 @@
 import { Crown, ExternalLink, Loader2, LogIn, LogOut, RefreshCw, UserRound } from 'lucide-react';
 import { useState } from 'react';
 import { useI18n } from '../i18n';
-import { accountLabel, canPurchase, formatDate, membershipBadge, type CheckoutPlan, type FeatureAccess, type PaidFeature } from '../lib/membership';
+import { accountLabel, canPurchase, formatDate, membershipBadge, type CheckoutPlan, type Feature, type FeatureAccess } from '../lib/membership';
 import { useAccountStore, useFeatureAccess, usePlanLimits } from '../store/useAccountStore';
 import { useVideoStore } from '../store/useVideoStore';
 
@@ -200,9 +200,9 @@ function PlanLimitsTable() {
         <dt>{l.watermark}</dt>
         <dd>{limits.watermark ? l.watermarkOn : l.watermarkOff}</dd>
         <dt>{l.aiDirector}</dt>
-        <dd>{limits.aiDirector ? l.yes : l.no}</dd>
+        <dd>{l.ownCost}</dd>
         <dt>{l.aiCutCleanup}</dt>
-        <dd>{limits.aiCutCleanup ? l.yes : l.no}</dd>
+        <dd>{l.local}</dd>
         <dt>{l.commercialUse}</dt>
         <dd>{limits.commercialUse ? l.commercialYes : l.commercialNo}</dd>
       </dl>
@@ -233,7 +233,7 @@ export function FeatureGateNotice({ access, message }: { access: FeatureAccess; 
   );
 }
 
-export function useGate(feature: PaidFeature) {
+export function useGate(feature: Feature) {
   const access = useFeatureAccess(feature);
   return { access, allowed: access === 'allowed' };
 }

@@ -235,15 +235,12 @@ const zhCN = {
       commercialUse: '商用授权',
       commercialYes: '可商用',
       commercialNo: '仅个人使用',
-      yes: '可用',
-      no: 'Pro 可用',
+      ownCost: '所有套餐可用（使用你自己的 Claude Code / Codex / ChatGPT）',
+      local: '所有套餐可用（在本机运行）',
     },
     freeExportNote: '免费版：导出最高 720p，成片带 WebClaw Video Creator 水印。升级 Pro 可导出最高 4K、无水印。',
     proOnly: {
       resolution: '更高分辨率为 Pro 功能',
-      cleanup: 'AI 一键清理（去语气词、删长停顿）为 Pro 功能，手动剪辑不受影响',
-      director: 'AI 导演为 Pro 功能',
-      chatgpt: '让 ChatGPT 调用视频工具（AI 导演）为 Pro 功能；免费版连接后工具调用会被拒绝',
     },
     gate: {
       signIn: '该功能需要登录',

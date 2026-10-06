@@ -131,14 +131,16 @@ pub struct Membership {
 /// `benefits` of an entitled membership; anything missing or malformed falls back to the
 /// free value (fail closed). Applied by the export/render/agent commands and handed to the
 /// Node side (sidecar args, entitlement file). Mirrors scripts/lib/plan.mjs.
+///
+/// Only what WebClaw pays for or premium output is a plan limit. Capabilities the user pays
+/// for themselves (their own agent CLI / ChatGPT login and quota, their own API keys, this
+/// machine) are not: AI Director, AI cleanup and ChatGPT-OAuth image generation are free.
 #[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct PlanLimits {
     /// Short side of the exported frame in pixels (the app's 720p / 1080p / 4K presets).
     pub max_export_height: u32,
     pub watermark: bool,
-    pub ai_director: bool,
-    pub ai_cut_cleanup: bool,
     /// Licensing only: shown in the UI, nothing technical depends on it.
     pub commercial_use: bool,
 }
@@ -146,8 +148,6 @@ pub struct PlanLimits {
 pub const FREE_LIMITS: PlanLimits = PlanLimits {
     max_export_height: 720,
     watermark: true,
-    ai_director: false,
-    ai_cut_cleanup: false,
     commercial_use: false,
 };
 
@@ -169,8 +169,6 @@ pub fn limits_for(entitled: bool, membership: Option<&Membership>) -> PlanLimits
             .map(|height| height.clamp(MIN_EXPORT_HEIGHT, MAX_EXPORT_HEIGHT) as u32)
             .unwrap_or(FREE_LIMITS.max_export_height),
         watermark: !granted("watermarkFree"),
-        ai_director: granted("aiDirector"),
-        ai_cut_cleanup: granted("aiCutCleanup"),
         commercial_use: granted("commercialUse"),
     }
 }
@@ -1098,7 +1096,7 @@ mod tests {
             "aiCutCleanup": true, "commercialUse": true}));
         assert_eq!(
             limits_for(true, Some(&pro)),
-            PlanLimits { max_export_height: 2160, watermark: false, ai_director: true, ai_cut_cleanup: true, commercial_use: true }
+            PlanLimits { max_export_height: 2160, watermark: false, commercial_use: true }
         );
         // Not entitled: free, whatever the cached benefits say.
         assert_eq!(limits_for(false, Some(&pro)), FREE_LIMITS);
@@ -1134,7 +1132,7 @@ mod tests {
         let doc = entitlement_document(&FREE_LIMITS, 1_000);
         assert_eq!(doc["version"], 1);
         assert_eq!(doc["expiresAt"], 1_000 + ENTITLEMENT_FILE_TTL.as_millis() as u64);
-        assert_eq!(doc["limits"], json!({"maxExportHeight": 720, "watermark": true, "aiDirector": false, "aiCutCleanup": false, "commercialUse": false}));
+        assert_eq!(doc["limits"], json!({"maxExportHeight": 720, "watermark": true, "commercialUse": false}));
     }
 
     #[test]

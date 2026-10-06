@@ -117,7 +117,7 @@ export default function ChatgptConnectionCard() {
         {c.title}
       </span>
       <p className="settings-hint">{c.desc}</p>
-      <FeatureGateNotice access={directorGate.access} message={t.account.proOnly.chatgpt} />
+      <FeatureGateNotice access={directorGate.access} />
 
       <div className="chatgpt-status">
         <span className={`pill ${pillClass}`}>

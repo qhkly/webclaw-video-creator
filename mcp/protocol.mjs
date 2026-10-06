@@ -21,11 +21,17 @@ export const SERVER_INSTRUCTIONS = [
   'Relative paths resolve inside the workspace; outputs are always written inside the workspace.',
 ].join(' ');
 
-/** Shown to ChatGPT / the agent CLI when a free install calls a tool. */
+/**
+ * Gating rule: who pays decides. The tools here run on the user's own agent CLI / ChatGPT login,
+ * their own quotas and API keys, or this machine, so they are open on every plan. A tool's `cost`
+ * is approval semantics only ('paid' = spends the user's own quota, always confirmed per call),
+ * not a WebClaw plan requirement. A future tool that WebClaw pays for (a platform-hosted provider)
+ * declares `planFeature: '<plan limit key>'` and is refused unless that limit is `true`.
+ */
 export const PRO_REQUIRED_MESSAGE =
-  'AI Director (ChatGPT / agent CLIs driving the video tools) is a WebClaw Video Creator Pro feature. ' +
+  'This tool uses a WebClaw-paid service and needs WebClaw Video Creator Pro. ' +
   'Ask the user to sign in and upgrade in the app (Settings → Account & membership). ' +
-  'AI 导演是 Pro 功能：请在应用「设置 → 账户与会员」登录并升级后重试。';
+  '该工具使用 WebClaw 代付的服务，需要 Pro：请在应用「设置 → 账户与会员」登录并升级后重试。';
 
 /**
  * `readPlan` returns the plan limits (scripts/lib/plan.mjs). By default it reads the entitlement
@@ -108,9 +114,10 @@ export function createMcpServer({ tools, ctx, approval = null, log = () => {}, r
       }
     };
     try {
-      // Every tool here is the AI Director's toolset; listing stays open, calling needs Pro.
+      // Read on every call: export limits (video_render) and any platform-paid tool follow a
+      // membership change without restarting the server.
       const plan = await readPlan();
-      if (plan?.aiDirector !== true) {
+      if (tool.planFeature && plan?.[tool.planFeature] !== true) {
         throw new ToolError(PRO_REQUIRED_MESSAGE);
       }
       validateArgs(tool.inputSchema, args);

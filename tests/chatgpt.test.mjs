@@ -22,7 +22,8 @@ import {
 import { DEFAULT_HTTP_PORT, PortInUseError, hostIsLoopback, originIsLoopback, resolvePort, startHttpMcp } from '../mcp/http.mjs';
 import { createContext } from '../mcp/context.mjs';
 import { createMcpServer } from '../mcp/protocol.mjs';
-const PRO_PLAN = { maxExportHeight: 2160, watermark: false, aiDirector: true, aiCutCleanup: true, commercialUse: true };
+import { FREE_LIMITS } from '../scripts/lib/plan.mjs';
+const PRO_PLAN = { maxExportHeight: 2160, watermark: false, commercialUse: true };
 import { tools } from '../mcp/tools.mjs';
 import {
   BIN_OVERRIDE_ENV,
@@ -126,6 +127,19 @@ test('ChatGPT tools/call activity is recorded safely for the app timeline', asyn
     assert.ok(activity.finishedAt);
     assert.ok(!JSON.stringify(activity).includes(API_KEY));
     assert.ok(!JSON.stringify(activity).includes(b.token));
+  } finally {
+    await b.stop();
+  }
+});
+
+test('HTTP MCP on the free plan: ChatGPT can drive the basic video tools (no Pro refusal)', async () => {
+  const b = await bridge({ readPlan: async () => FREE_LIMITS });
+  try {
+    for (const name of ['video_project_status', 'video_providers_list']) {
+      const reply = await b.rpc('tools/call', { name, arguments: {} });
+      assert.equal(reply.result.isError, undefined, `${name}: ${reply.result.content[0].text}`);
+      assert.doesNotMatch(reply.result.content[0].text, /Pro feature|needs WebClaw Video Creator Pro/);
+    }
   } finally {
     await b.stop();
   }

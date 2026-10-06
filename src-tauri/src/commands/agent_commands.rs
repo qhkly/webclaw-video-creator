@@ -110,11 +110,9 @@ pub async fn agent_start(app: AppHandle, params: AgentStartParams) -> Result<Age
     if task.is_empty() {
         return Err("请输入要制作的视频任务".to_string());
     }
-    // Checked here, not only in the UI. The MCP server re-checks every tool call against the
-    // entitlement file, so a run cannot outlive a lapsed membership either.
-    if !super::account_commands::current_limits(&app).await.ai_director {
-        return Err("AI 导演是 Pro 功能，请在「设置 → 账户与会员」登录并升级".to_string());
-    }
+    // No membership check: the run uses the user's own Claude Code / Codex login and plan, so
+    // the AI Director is free. The MCP server reads the entitlement file on every tool call only
+    // for plan limits (video_render resolution / watermark, any future WebClaw-paid tool).
     let entitlement_file = super::account_commands::entitlement_file_path(&app)?;
     let project = params.project.trim().to_string();
     if !is_safe_id(&project) {

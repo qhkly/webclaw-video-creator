@@ -290,7 +290,7 @@ export default function CutterPage() {
   };
 
   const applySuggestion = (kind: 'fillers' | 'pauses') => {
-    // AI cleanup is a local heuristic whose result is ordinary cut ranges, so this is its gate.
+    // A local heuristic producing ordinary cut ranges: free on every plan (membership.ts OWN_COST_FEATURES).
     if (!cleanupGate.allowed) {
       return;
     }
@@ -475,7 +475,7 @@ export default function CutterPage() {
                 )}
               </div>
             )}
-            {transcript && <FeatureGateNotice access={cleanupGate.access} message={t.account.proOnly.cleanup} />}
+            {transcript && <FeatureGateNotice access={cleanupGate.access} />}
             {transcript?.warning && (
               <p className="cutter-warning">
                 <AlertTriangle size={14} />
