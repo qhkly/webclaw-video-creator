@@ -7,6 +7,7 @@ import { needsApproval } from '../mcp/approval.mjs';
 import { createContext, findFfmpeg, run } from '../mcp/context.mjs';
 import { checkOpenAIOAuthImage, normalizeImage, readPngSize } from '../mcp/image-gen.mjs';
 import { createMcpServer } from '../mcp/protocol.mjs';
+const PRO_PLAN = { maxExportHeight: 2160, watermark: false, aiDirector: true, aiCutCleanup: true, commercialUse: true };
 import { listProviders } from '../mcp/providers.mjs';
 import { tools } from '../mcp/tools.mjs';
 import { stageSceneMedia } from '../scripts/lib/stage-media.mjs';
@@ -28,7 +29,7 @@ async function pngBytes(width, height) {
 async function setup(generateImage) {
   const workspace = await mkdtemp(join(tmpdir(), 'vc-image-'));
   const ctx = Object.assign(createContext({ workspace }), { generateImage });
-  const server = createMcpServer({ tools, ctx });
+  const server = createMcpServer({ tools, ctx, readPlan: async () => PRO_PLAN });
   let id = 0;
   const call = (name, args) => server.handle({ jsonrpc: '2.0', id: ++id, method: 'tools/call', params: { name, arguments: args } }).then((r) => r.result);
   return { workspace, ctx, call };

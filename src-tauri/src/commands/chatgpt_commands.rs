@@ -212,6 +212,8 @@ async fn start_bridge(app: &AppHandle) -> Result<(), String> {
         .arg("--port")
         .arg(MCP_PORT.to_string())
         .arg("--parent-stdin")
+        // Tool calls are gated per call against the plan the app keeps current there.
+        .env("VIDEO_CREATOR_ENTITLEMENT_FILE", super::account_commands::entitlement_file_path(app)?)
         .env_remove("TAURI_CONFIG")
         .stdin(Stdio::piped())
         .stdout(Stdio::null())

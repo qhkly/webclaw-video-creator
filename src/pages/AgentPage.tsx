@@ -172,7 +172,7 @@ export default function AgentPage() {
             </button>
           )}
         </div>
-        <FeatureGateNotice access={directorGate.access} />
+        <FeatureGateNotice access={directorGate.access} message={t.account.proOnly.director} />
         {showAdvanced && (
           <div className="agent-advanced">
             <label>

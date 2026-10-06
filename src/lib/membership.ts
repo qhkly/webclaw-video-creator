@@ -41,6 +41,29 @@ export interface Membership {
 /** Plans the store sells. Retired placeholders (trial / yearly / lifetime) still count when already owned. */
 export type CheckoutPlan = 'pro-monthly' | 'pro-yearly';
 
+/**
+ * What this install may do right now, computed by the Rust side from the store's benefits
+ * (account_commands.rs `limits_for`) and enforced there and in the Node sidecars / MCP tools.
+ * The UI only mirrors it. Same shape as scripts/lib/plan.mjs.
+ */
+export interface PlanLimits {
+  /** Short side of the exported frame in pixels: 720 (free) … 2160 (4K). */
+  maxExportHeight: number;
+  watermark: boolean;
+  aiDirector: boolean;
+  aiCutCleanup: boolean;
+  /** Licensing only; nothing technical depends on it. */
+  commercialUse: boolean;
+}
+
+export const FREE_LIMITS: Readonly<PlanLimits> = Object.freeze({
+  maxExportHeight: 720,
+  watermark: true,
+  aiDirector: false,
+  aiCutCleanup: false,
+  commercialUse: false,
+});
+
 export interface AccountView {
   loginStatus: 'idle' | 'pending' | 'error';
   loginError: string | null;
@@ -50,19 +73,29 @@ export interface AccountView {
   membershipCheckedAt: number | null;
   phase: MembershipPhase;
   entitled: boolean;
+  limits: PlanLimits;
   serviceConfigured: boolean;
   lastError: string | null;
   productSlug: string;
   plans: CheckoutPlan[];
 }
 
-/**
- * Features that may be reserved for members. Which ones are paid is a product decision,
- * so enforcement ships OFF: with `enforce: false` every feature stays available and the
- * UI only shows the account / upgrade entry points. Flip `enforce` (and trim the list)
- * once pricing is decided; the gates are already wired at these call sites.
- */
-export const PAID_FEATURES = ['export.4k', 'agent.director'] as const;
+/** The account's limits, validated field by field; no account / anything odd → free. */
+export function planLimits(account: AccountView | null | undefined): PlanLimits {
+  const raw = account?.limits;
+  if (!raw || typeof raw !== 'object') return FREE_LIMITS;
+  const height = raw.maxExportHeight;
+  return {
+    maxExportHeight: Number.isInteger(height) ? Math.min(2160, Math.max(720, height)) : 720,
+    watermark: raw.watermark !== false,
+    aiDirector: raw.aiDirector === true,
+    aiCutCleanup: raw.aiCutCleanup === true,
+    commercialUse: raw.commercialUse === true,
+  };
+}
+
+/** Pro-only capabilities. Free keeps manual editing, preview and 720p watermarked export. */
+export const PAID_FEATURES = ['agent.director', 'cutter.aiCleanup', 'export.1080p', 'export.4k', 'export.noWatermark'] as const;
 export type PaidFeature = (typeof PAID_FEATURES)[number];
 
 export interface MembershipPolicy {
@@ -71,26 +104,36 @@ export interface MembershipPolicy {
 }
 
 export const MEMBERSHIP_POLICY: MembershipPolicy = {
-  enforce: false,
+  enforce: true,
   paidFeatures: new Set<PaidFeature>(PAID_FEATURES),
 };
 
-/** Which benefit each gated feature needs. Membership alone is not enough. */
-const FEATURE_BENEFIT: Record<PaidFeature, (benefits: VideoCreatorBenefits | null | undefined) => boolean> = {
-  'export.4k': (b) => typeof b?.maxExportHeight === 'number' && b.maxExportHeight >= 2160,
-  'agent.director': (b) => b?.aiDirector === true,
+/** Which plan limit each feature needs. */
+const FEATURE_ALLOWED: Record<PaidFeature, (limits: PlanLimits) => boolean> = {
+  'agent.director': (l) => l.aiDirector,
+  'cutter.aiCleanup': (l) => l.aiCutCleanup,
+  'export.1080p': (l) => l.maxExportHeight >= 1080,
+  'export.4k': (l) => l.maxExportHeight >= 2160,
+  'export.noWatermark': (l) => !l.watermark,
 };
+
+/** Render presets and the short side they need. */
+export const RESOLUTION_HEIGHT = { '720p': 720, '1080p': 1080, '4K': 2160 } as const;
+
+export function allowsResolution(limits: PlanLimits, resolution: keyof typeof RESOLUTION_HEIGHT): boolean {
+  return RESOLUTION_HEIGHT[resolution] <= limits.maxExportHeight;
+}
 
 /** allowed | signIn: needs an account | upgrade: needs membership | unavailable: can't tell right now. */
 export type FeatureAccess = 'allowed' | 'signIn' | 'upgrade' | 'unavailable';
 
 export function featureAccess(feature: PaidFeature, account: AccountView | null, policy: MembershipPolicy = MEMBERSHIP_POLICY): FeatureAccess {
   if (!policy.enforce || !policy.paidFeatures.has(feature)) return 'allowed';
+  if (FEATURE_ALLOWED[feature](planLimits(account))) return 'allowed';
   if (!account) return 'unavailable';
   if (!account.user || account.phase === 'sessionExpired') return 'signIn';
-  if (account.entitled) return FEATURE_BENEFIT[feature](account.membership?.benefits) ? 'allowed' : 'upgrade';
-  // A definitive "no" from the service means upgrade; anything else means we could not check.
-  if (account.phase === 'fresh' || (account.phase === 'cached' && account.membership?.member === false)) return 'upgrade';
+  // Entitled but the benefit is missing, or a definitive "no" from the service: upgrade.
+  if (account.entitled || account.phase === 'fresh' || (account.phase === 'cached' && account.membership?.member === false)) return 'upgrade';
   return 'unavailable';
 }
 

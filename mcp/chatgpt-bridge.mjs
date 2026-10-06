@@ -24,6 +24,7 @@ import { spawn, execFileSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import { createContext } from './context.mjs';
 import { createMcpServer } from './protocol.mjs';
+import { planFromEnv } from '../scripts/lib/plan.mjs';
 import { tools } from './tools.mjs';
 import { DEFAULT_HTTP_PORT, startHttpMcp } from './http.mjs';
 import { loadConfig, redactText, validTunnelId } from './chatgpt-config.mjs';
@@ -117,6 +118,8 @@ export async function startBridge({
   tunnel = true,
   env = process.env,
   log = () => {},
+  // Plan limits per tool call; the app hands the entitlement file over in VIDEO_CREATOR_ENTITLEMENT_FILE.
+  readPlan = () => planFromEnv(env),
 } = {}) {
   stateDir = resolve(stateDir);
   await mkdir(stateDir, { recursive: true, mode: 0o700 });
@@ -132,7 +135,7 @@ export async function startBridge({
     timeoutMs: Number(env.VIDEO_CREATOR_APPROVAL_TIMEOUT_MS) || 10 * 60 * 1000,
     pollMs: 250,
   };
-  const server = createMcpServer({ tools, ctx, approval, log: say });
+  const server = createMcpServer({ tools, ctx, approval, log: say, readPlan });
 
   const status = {
     pid: process.pid,

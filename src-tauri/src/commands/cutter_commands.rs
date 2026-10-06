@@ -78,18 +78,22 @@ pub async fn export_cut<R: Runtime>(
     let input = validate_input_file(&video_path)?;
     let output = validate_output_path(&output_path, &input)?;
     let ranges = validate_ranges(&ranges_json)?;
+    // Plan limits act on the real encode: downscale to the plan's short side, burn in the watermark.
+    let limits = super::account_commands::current_limits(&app).await;
+    let mut args = vec![
+        "--input".into(),
+        input.to_string_lossy().to_string(),
+        "--ranges".into(),
+        ranges,
+        "--output".into(),
+        output.to_string_lossy().to_string(),
+    ];
+    args.extend(super::account_commands::limit_args(&limits));
     let done = run_sidecar(
         &app,
         "export",
         "cut-export.mjs",
-        vec![
-            "--input".into(),
-            input.to_string_lossy().to_string(),
-            "--ranges".into(),
-            ranges,
-            "--output".into(),
-            output.to_string_lossy().to_string(),
-        ],
+        args,
         vec![],
     )
     .await?;

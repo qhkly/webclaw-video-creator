@@ -43,7 +43,9 @@ node scripts/cut-export.mjs --input demo.mp4 --ranges '[{"start":0,"end":3.6},{"
 Sign-in uses the unified WebClaw account (auth.qhkly.com, PKCE public client with a loopback redirect); membership is
 read through the Video Creator account service (a Cloudflare Worker in [`account-service/`](account-service/README.md),
 the only place that holds the store credential) and purchases open the WebClaw Store checkout. Payment never happens in
-the app. Feature gating ships disabled until pricing is decided. Contract, required server registrations and open
+the app. The free plan keeps manual editing and exports up to 720p with a watermark; Pro (store benefits) unlocks the
+AI Director, AI cleanup, up to 4K and no watermark. Limits are enforced in the Rust commands, the Node sidecars and every
+MCP tool call, not just the UI. Contract, gating points, required server registrations and open
 product decisions: [docs/account-membership.md](docs/account-membership.md).
 
 ## Features

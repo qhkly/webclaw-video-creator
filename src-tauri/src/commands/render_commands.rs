@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use tauri::{AppHandle, Emitter, Manager};
 use tokio::io::{AsyncBufReadExt, BufReader};
+use super::account_commands::{clamp_resolution, current_limits, limit_args};
 use super::node_env::node_command;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -49,6 +50,9 @@ pub async fn render_video(
 ) -> Result<String, String> {
     let project_dir = project_dir(&app)?;
     let script_path = project_dir.join("scripts").join("render.mjs");
+    // The plan decides, not the UI: clamp the resolution and pass the watermark flag.
+    let limits = current_limits(&app).await;
+    let resolution = clamp_resolution(&resolution, limits.max_export_height);
     let mut child_command = node_command();
     child_command
         .current_dir(&project_dir)
@@ -60,9 +64,10 @@ pub async fn render_video(
         .arg("--aspect")
         .arg(&aspect)
         .arg("--resolution")
-        .arg(&resolution)
+        .arg(resolution)
         .arg("--format")
-        .arg(&format);
+        .arg(&format)
+        .args(limit_args(&limits));
     if let Some(captions_json) = captions_json {
         child_command.arg("--captions").arg(captions_json);
     }

@@ -6,13 +6,14 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 import { APP_ROOT, createContext, findFfmpeg, run } from '../mcp/context.mjs';
 import { createMcpServer } from '../mcp/protocol.mjs';
+const PRO_PLAN = { maxExportHeight: 2160, watermark: false, aiDirector: true, aiCutCleanup: true, commercialUse: true };
 import { providerIds } from '../mcp/providers.mjs';
 import { buildMuxArgs, parseProbe, tools, withFileLock } from '../mcp/tools.mjs';
 
 async function setup() {
   const workspace = await mkdtemp(join(tmpdir(), 'vc-mcp-'));
   const ctx = createContext({ workspace });
-  const server = createMcpServer({ tools, ctx });
+  const server = createMcpServer({ tools, ctx, readPlan: async () => PRO_PLAN });
   let id = 0;
   const call = async (name, args = {}) => {
     const response = await server.handle({ jsonrpc: '2.0', id: ++id, method: 'tools/call', params: { name, arguments: args } });
@@ -257,24 +258,57 @@ test('render staging rewrites local media to static paths inside publicDir', asy
   assert.equal(scenes[0].audio.path, join(root, 'voice.mp3'), 'input scenes are not mutated');
 });
 
-test('stdio transport: an MCP client can initialize and list tools', async () => {
+async function stdioSession(messages, env = {}) {
   const workspace = await mkdtemp(join(tmpdir(), 'vc-mcp-stdio-'));
-  const child = spawn(process.execPath, [join(APP_ROOT, 'mcp', 'server.mjs'), '--workspace', workspace], { stdio: ['pipe', 'pipe', 'pipe'] });
-  const messages = [
-    { jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'test', version: '0' } } },
-    { jsonrpc: '2.0', method: 'notifications/initialized' },
-    { jsonrpc: '2.0', id: 2, method: 'tools/list' },
-    { jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'video_project_status', arguments: {} } },
-  ];
+  const child = spawn(process.execPath, [join(APP_ROOT, 'mcp', 'server.mjs'), '--workspace', workspace], {
+    stdio: ['pipe', 'pipe', 'pipe'],
+    env: { ...process.env, VIDEO_CREATOR_ENTITLEMENT_FILE: '', ...env },
+  });
   child.stdin.end(messages.map((message) => JSON.stringify(message)).join('\n') + '\n');
   let stdout = '';
   child.stdout.on('data', (chunk) => (stdout += chunk));
   const code = await new Promise((resolve) => child.on('close', resolve));
-  assert.equal(code, 0);
   const responses = stdout.trim().split('\n').map((line) => JSON.parse(line));
-  const byId = Object.fromEntries(responses.map((response) => [response.id, response]));
+  return { code, workspace, responses, byId: Object.fromEntries(responses.map((response) => [response.id, response])) };
+}
+
+async function entitlementFile(limits, expiresAt = Date.now() + 10 * 60 * 1000) {
+  const path = join(await mkdtemp(join(tmpdir(), 'vc-entitlement-')), 'entitlement.json');
+  await writeFile(path, JSON.stringify({ version: 1, limits, expiresAt }));
+  return path;
+}
+
+const STATUS_CALL = { jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'video_project_status', arguments: {} } };
+
+test('stdio transport: an MCP client can initialize and list tools', async () => {
+  const messages = [
+    { jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'test', version: '0' } } },
+    { jsonrpc: '2.0', method: 'notifications/initialized' },
+    { jsonrpc: '2.0', id: 2, method: 'tools/list' },
+    STATUS_CALL,
+  ];
+  const { code, workspace, responses, byId } = await stdioSession(messages, { VIDEO_CREATOR_ENTITLEMENT_FILE: await entitlementFile(PRO_PLAN) });
+  assert.equal(code, 0);
   assert.equal(byId[1].result.serverInfo.name, 'webclaw-video-creator');
   assert.ok(byId[2].result.tools.length >= 5);
   assert.equal(byId[3].result.structuredContent.workspace, workspace);
   assert.equal(responses.length, 3, 'notifications must not produce responses');
+});
+
+test('AI Director gate: without a live Pro entitlement every tool call is refused, listing still works', async () => {
+  const free = { ...PRO_PLAN, aiDirector: false };
+  const cases = {
+    'no entitlement file': {},
+    'missing file': { VIDEO_CREATOR_ENTITLEMENT_FILE: join(tmpdir(), 'vc-no-such-entitlement.json') },
+    'expired Pro file': { VIDEO_CREATOR_ENTITLEMENT_FILE: await entitlementFile(PRO_PLAN, Date.now() - 1) },
+    'free plan file': { VIDEO_CREATOR_ENTITLEMENT_FILE: await entitlementFile(free) },
+    'aiDirector not a boolean': { VIDEO_CREATOR_ENTITLEMENT_FILE: await entitlementFile({ ...PRO_PLAN, aiDirector: 'true' }) },
+  };
+  for (const [label, env] of Object.entries(cases)) {
+    const { code, byId } = await stdioSession([{ jsonrpc: '2.0', id: 2, method: 'tools/list' }, STATUS_CALL], env);
+    assert.equal(code, 0, label);
+    assert.ok(byId[2].result.tools.length >= 5, label);
+    assert.equal(byId[3].result.isError, true, label);
+    assert.match(byId[3].result.content[0].text, /Pro/, label);
+  }
 });

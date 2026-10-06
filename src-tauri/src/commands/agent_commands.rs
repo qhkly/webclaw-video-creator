@@ -110,6 +110,12 @@ pub async fn agent_start(app: AppHandle, params: AgentStartParams) -> Result<Age
     if task.is_empty() {
         return Err("请输入要制作的视频任务".to_string());
     }
+    // Checked here, not only in the UI. The MCP server re-checks every tool call against the
+    // entitlement file, so a run cannot outlive a lapsed membership either.
+    if !super::account_commands::current_limits(&app).await.ai_director {
+        return Err("AI 导演是 Pro 功能，请在「设置 → 账户与会员」登录并升级".to_string());
+    }
+    let entitlement_file = super::account_commands::entitlement_file_path(&app)?;
     let project = params.project.trim().to_string();
     if !is_safe_id(&project) {
         return Err("项目名只能包含字母、数字、点、下划线和短横线".to_string());
@@ -152,6 +158,7 @@ pub async fn agent_start(app: AppHandle, params: AgentStartParams) -> Result<Age
         "VIDEO_CREATOR_WORKSPACE": workspace.to_string_lossy(),
         "VIDEO_CREATOR_APPROVAL_DIR": approval_dir.to_string_lossy(),
         "VIDEO_CREATOR_APPROVAL": approval,
+        "VIDEO_CREATOR_ENTITLEMENT_FILE": entitlement_file.to_string_lossy(),
         "PATH": effective_path(),
     });
     let instructions = format!("{DIRECTOR_PROMPT} Project id: \"{project}\".");

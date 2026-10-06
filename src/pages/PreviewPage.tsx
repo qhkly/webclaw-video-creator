@@ -5,12 +5,15 @@ import SceneVisual from '../components/SceneVisual';
 import { ASPECT_CSS, ASPECT_DIMENSIONS } from '../constants/aspect';
 import { useVideoStore } from '../store/useVideoStore';
 import { useI18n } from '../i18n';
+import { usePlanLimits } from '../store/useAccountStore';
 
 export default function PreviewPage() {
   const scenes = useVideoStore((state) => state.scenes);
   const aspect = useVideoStore((state) => state.aspect);
   const captions = useVideoStore((state) => state.captions);
   const { t } = useI18n();
+  // Show what the export will contain: the free plan's watermark is part of the frame.
+  const { watermark } = usePlanLimits();
   const totalSeconds = scenes.reduce((total, scene) => total + scene.duration, 0);
   const durationInFrames = Math.max(1, scenes.reduce((total, scene) => total + scene.duration * 30, 0));
   const [selectedId, setSelectedId] = useState(() => scenes[0]?.id ?? '');
@@ -35,7 +38,7 @@ export default function PreviewPage() {
       <div className="player-frame card">
         <Player
           component={VideoComposition}
-          inputProps={{ scenes, aspect, captions }}
+          inputProps={{ scenes, aspect, captions, watermark }}
           durationInFrames={durationInFrames}
           compositionWidth={dimensions.width}
           compositionHeight={dimensions.height}

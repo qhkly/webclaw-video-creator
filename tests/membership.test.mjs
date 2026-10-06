@@ -2,8 +2,11 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import {
+  FREE_LIMITS,
   MEMBERSHIP_POLICY,
   PAID_FEATURES,
+  allowsResolution,
+  planLimits,
   accountLabel,
   canPurchase,
   featureAccess,
@@ -23,6 +26,7 @@ function account(patch = {}) {
     membershipCheckedAt: null,
     phase: 'fresh',
     entitled: false,
+    limits: FREE_LIMITS,
     serviceConfigured: true,
     lastError: null,
     productSlug: 'webclaw-video-creator',
@@ -43,42 +47,56 @@ const membership = (patch = {}) => ({
   ...patch,
 });
 
-const enforced = { enforce: true, paidFeatures: new Set(PAID_FEATURES) };
 
-test('shipped policy does not gate anything (paid features are a pending product decision)', () => {
-  assert.equal(MEMBERSHIP_POLICY.enforce, false);
+const PRO_LIMITS = { maxExportHeight: 2160, watermark: false, aiDirector: true, aiCutCleanup: true, commercialUse: true };
+const pro = (patch = {}) => account({ entitled: true, membership: membership(), limits: PRO_LIMITS, ...patch });
+
+test('gating is on and every paid feature is closed for the free plan', () => {
+  assert.equal(MEMBERSHIP_POLICY.enforce, true);
   for (const feature of PAID_FEATURES) {
-    for (const value of [null, account({ user: null, phase: 'signedOut' }), account()]) {
-      assert.equal(featureAccess(feature, value), 'allowed');
-    }
+    assert.notEqual(featureAccess(feature, null), 'allowed', feature);
+    assert.notEqual(featureAccess(feature, account({ user: null, phase: 'signedOut', limits: FREE_LIMITS })), 'allowed', feature);
+    assert.notEqual(featureAccess(feature, account({ limits: FREE_LIMITS })), 'allowed', feature);
+    assert.equal(featureAccess(feature, pro()), 'allowed', feature);
   }
 });
 
-test('enforced policy: sign in, upgrade, or unavailable — never a silent allow', () => {
-  const f = 'export.4k';
-  assert.equal(featureAccess(f, null, enforced), 'unavailable');
-  assert.equal(featureAccess(f, account({ user: null, phase: 'signedOut' }), enforced), 'signIn');
-  assert.equal(featureAccess(f, account({ phase: 'sessionExpired' }), enforced), 'signIn');
-  assert.equal(featureAccess(f, account({ entitled: true, membership: membership() }), enforced), 'allowed');
-  assert.equal(featureAccess(f, account({ membership: membership({ member: false }) }), enforced), 'upgrade');
-  assert.equal(featureAccess(f, account({ phase: 'cached', membership: membership({ member: false }) }), enforced), 'upgrade');
+test('access reason: sign in, upgrade, or unavailable — never a silent allow', () => {
+  const f = 'agent.director';
+  assert.equal(featureAccess(f, null), 'unavailable');
+  assert.equal(featureAccess(f, account({ user: null, phase: 'signedOut', limits: FREE_LIMITS })), 'signIn');
+  assert.equal(featureAccess(f, account({ phase: 'sessionExpired', limits: FREE_LIMITS })), 'signIn');
+  assert.equal(featureAccess(f, account({ membership: membership({ member: false }), limits: FREE_LIMITS })), 'upgrade');
+  assert.equal(featureAccess(f, account({ phase: 'cached', membership: membership({ member: false }), limits: FREE_LIMITS })), 'upgrade');
   for (const phase of ['unconfigured', 'offline', 'error']) {
-    assert.equal(featureAccess(f, account({ phase }), enforced), 'unavailable', phase);
+    assert.equal(featureAccess(f, account({ phase, limits: FREE_LIMITS })), 'unavailable', phase);
   }
-  // Features outside the paid list stay open even when enforcing.
-  assert.equal(featureAccess(f, account({ user: null }), { enforce: true, paidFeatures: new Set() }), 'allowed');
+  // Member whose benefits lack this capability: upgrade, not allowed.
+  assert.equal(featureAccess(f, pro({ limits: { ...PRO_LIMITS, aiDirector: false } })), 'upgrade');
+  // Turning enforcement off (tests / future) opens everything.
+  assert.equal(featureAccess(f, null, { enforce: false, paidFeatures: new Set(PAID_FEATURES) }), 'allowed');
 });
 
-test('enforced policy: gates read the store benefits, not just membership', () => {
-  const member = (benefits) => account({ entitled: true, membership: membership({ benefits }) });
-  assert.equal(featureAccess('export.4k', member({ maxExportHeight: 2160 }), enforced), 'allowed');
-  assert.equal(featureAccess('export.4k', member({ maxExportHeight: 1080 }), enforced), 'upgrade');
-  assert.equal(featureAccess('export.4k', member({ maxExportHeight: '2160' }), enforced), 'upgrade');
-  assert.equal(featureAccess('agent.director', member({ aiDirector: true }), enforced), 'allowed');
-  // Missing field or missing benefits = not granted.
-  assert.equal(featureAccess('agent.director', member({}), enforced), 'upgrade');
-  assert.equal(featureAccess('agent.director', member(null), enforced), 'upgrade');
-  assert.equal(featureAccess('agent.director', member({ aiDirector: 'yes' }), enforced), 'upgrade');
+test('features map onto the plan limits the commands enforce', () => {
+  const at = (limits) => account({ entitled: true, membership: membership(), limits });
+  assert.equal(featureAccess('export.1080p', at({ ...FREE_LIMITS, maxExportHeight: 1080 })), 'allowed');
+  assert.equal(featureAccess('export.4k', at({ ...FREE_LIMITS, maxExportHeight: 1080 })), 'upgrade');
+  assert.equal(featureAccess('export.noWatermark', at({ ...FREE_LIMITS, watermark: false })), 'allowed');
+  assert.equal(featureAccess('cutter.aiCleanup', at({ ...FREE_LIMITS, aiCutCleanup: true })), 'allowed');
+  assert.equal(allowsResolution(FREE_LIMITS, '720p'), true);
+  assert.equal(allowsResolution(FREE_LIMITS, '1080p'), false);
+  assert.equal(allowsResolution(PRO_LIMITS, '4K'), true);
+});
+
+test('planLimits fails closed field by field', () => {
+  assert.deepEqual(planLimits(null), FREE_LIMITS);
+  assert.deepEqual(planLimits(account({ limits: undefined })), FREE_LIMITS);
+  assert.deepEqual(planLimits(pro()), PRO_LIMITS);
+  assert.deepEqual(
+    planLimits(account({ limits: { maxExportHeight: '2160', watermark: 'false', aiDirector: 1, aiCutCleanup: 'yes', commercialUse: null } })),
+    FREE_LIMITS,
+  );
+  assert.equal(planLimits(account({ limits: { ...PRO_LIMITS, maxExportHeight: 99999 } })).maxExportHeight, 2160);
 });
 
 test('badge reflects plan and phase', () => {

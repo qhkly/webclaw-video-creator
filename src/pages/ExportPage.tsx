@@ -3,6 +3,8 @@ import { Clock3, FolderOpen, Layers3, Monitor, Play, RefreshCw } from 'lucide-re
 import { useEffect, useState } from 'react';
 import VoiceSelector from '../components/VoiceSelector';
 import { FeatureGateNotice, useGate } from '../components/AccountPanel';
+import { allowsResolution } from '../lib/membership';
+import { usePlanLimits } from '../store/useAccountStore';
 import { onRenderProgress, renderVideo, saveScenes } from '../lib/tauri-bridge';
 import { useVideoStore } from '../store/useVideoStore';
 import { useI18n } from '../i18n';
@@ -24,8 +26,15 @@ export default function ExportPage() {
   const [result, setResult] = useState('');
   const totalSeconds = scenes.reduce((total, scene) => total + scene.duration, 0);
   const running = progress.percent > 0 && progress.percent < 100;
-  const gate4k = useGate('export.4k');
-  const blocked = resolution === '4K' && !gate4k.allowed;
+  // The render command clamps to the plan anyway; the UI only reflects it.
+  const limits = usePlanLimits();
+  const higherResGate = useGate('export.4k');
+
+  useEffect(() => {
+    if (!allowsResolution(limits, resolution)) {
+      setResolution((['4K', '1080p', '720p'] as Resolution[]).find((item) => allowsResolution(limits, item)) ?? '720p');
+    }
+  }, [limits, resolution]);
 
   useEffect(() => {
     let cleanup: (() => void) | undefined;
@@ -76,7 +85,13 @@ export default function ExportPage() {
             </span>
             <div className="choice-row">
               {(['720p', '1080p', '4K'] as Resolution[]).map((item) => (
-                <button className={resolution === item ? 'active' : ''} key={item} onClick={() => setResolution(item)}>
+                <button
+                  className={resolution === item ? 'active' : ''}
+                  key={item}
+                  disabled={!allowsResolution(limits, item)}
+                  title={allowsResolution(limits, item) ? undefined : t.account.proOnly.resolution}
+                  onClick={() => setResolution(item)}
+                >
                   {item}
                 </button>
               ))}
@@ -119,10 +134,10 @@ export default function ExportPage() {
           </div>
           <p className="progress-text">{progress.message}</p>
         </div>
-        {resolution === '4K' && <FeatureGateNotice access={gate4k.access} />}
+        {limits.watermark && <FeatureGateNotice access={higherResGate.access === 'allowed' ? 'upgrade' : higherResGate.access} message={t.account.freeExportNote} />}
         <button
           className="btn btn-primary btn-block export-cta"
-          disabled={!outputDir || running || blocked}
+          disabled={!outputDir || running}
           onClick={async () => {
             const scenesJson = await saveScenes({ scenes, outputDir });
             const output = await renderVideo({ scenesJson, outputDir, aspect, resolution, format, captionsJson: JSON.stringify(captions) });

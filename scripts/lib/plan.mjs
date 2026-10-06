@@ -98,7 +98,7 @@ export const WATERMARK_ASSET = { file: 'watermark.png', width: 1200, height: 150
 /** Watermark box for a frame, bottom-right: 26% of a landscape/square frame's width, 42% of a portrait one's. */
 export function watermarkBox(frameWidth, frameHeight) {
   const share = frameWidth >= frameHeight ? 0.26 : 0.42;
-  const width = even(Math.max(160, frameWidth * share));
+  const width = even(Math.max(120, frameWidth * share));
   const height = even((width * WATERMARK_ASSET.height) / WATERMARK_ASSET.width);
   const margin = Math.round(Math.min(frameWidth, frameHeight) * 0.03);
   return { width, height, x: frameWidth - width - margin, y: frameHeight - height - margin };

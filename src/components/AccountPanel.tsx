@@ -2,7 +2,7 @@ import { Crown, ExternalLink, Loader2, LogIn, LogOut, RefreshCw, UserRound } fro
 import { useState } from 'react';
 import { useI18n } from '../i18n';
 import { accountLabel, canPurchase, formatDate, membershipBadge, type CheckoutPlan, type FeatureAccess, type PaidFeature } from '../lib/membership';
-import { useAccountStore, useFeatureAccess } from '../store/useAccountStore';
+import { useAccountStore, useFeatureAccess, usePlanLimits } from '../store/useAccountStore';
 import { useVideoStore } from '../store/useVideoStore';
 
 function BadgePill() {
@@ -144,6 +144,8 @@ export function AccountSection() {
         </div>
       )}
 
+      <PlanLimitsTable />
+
       {user && phaseNote && <p className="account-note">{phaseNote}</p>}
       {account?.loginError && <p className="account-error">{account.loginError}</p>}
       {account?.lastError && account.phase !== 'unconfigured' && <p className="account-error">{account.lastError}</p>}
@@ -183,8 +185,33 @@ export function AccountSection() {
   );
 }
 
+/** What the current plan includes. Mirrors the limits the commands actually enforce. */
+function PlanLimitsTable() {
+  const { t } = useI18n();
+  const limits = usePlanLimits();
+  const l = t.account.limits;
+  const height = limits.maxExportHeight >= 2160 ? '4K' : `${limits.maxExportHeight}p`;
+  return (
+    <div className="account-limits">
+      <span className="field-label">{l.title}</span>
+      <dl className="account-facts">
+        <dt>{l.export}</dt>
+        <dd>{height}</dd>
+        <dt>{l.watermark}</dt>
+        <dd>{limits.watermark ? l.watermarkOn : l.watermarkOff}</dd>
+        <dt>{l.aiDirector}</dt>
+        <dd>{limits.aiDirector ? l.yes : l.no}</dd>
+        <dt>{l.aiCutCleanup}</dt>
+        <dd>{limits.aiCutCleanup ? l.yes : l.no}</dd>
+        <dt>{l.commercialUse}</dt>
+        <dd>{limits.commercialUse ? l.commercialYes : l.commercialNo}</dd>
+      </dl>
+    </div>
+  );
+}
+
 /** Inline notice for a gated feature. Renders nothing while the feature is allowed. */
-export function FeatureGateNotice({ access }: { access: FeatureAccess }) {
+export function FeatureGateNotice({ access, message }: { access: FeatureAccess; message?: string }) {
   const { t, locale } = useI18n();
   const login = useAccountStore((state) => state.login);
   const setActivePage = useVideoStore((state) => state.setActivePage);
@@ -192,7 +219,7 @@ export function FeatureGateNotice({ access }: { access: FeatureAccess }) {
   return (
     <div className="feature-gate">
       <Crown size={14} />
-      <span>{t.account.gate[access]}</span>
+      <span>{message ?? t.account.gate[access]}</span>
       {access === 'signIn' ? (
         <button type="button" className="btn btn-soft btn-sm" onClick={() => void login(locale)}>
           {t.account.gate.signInAction}

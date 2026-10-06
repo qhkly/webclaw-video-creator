@@ -22,6 +22,7 @@ import {
 import { DEFAULT_HTTP_PORT, PortInUseError, hostIsLoopback, originIsLoopback, resolvePort, startHttpMcp } from '../mcp/http.mjs';
 import { createContext } from '../mcp/context.mjs';
 import { createMcpServer } from '../mcp/protocol.mjs';
+const PRO_PLAN = { maxExportHeight: 2160, watermark: false, aiDirector: true, aiCutCleanup: true, commercialUse: true };
 import { tools } from '../mcp/tools.mjs';
 import {
   BIN_OVERRIDE_ENV,
@@ -49,7 +50,7 @@ async function tempDir(prefix) {
 async function bridge(options = {}) {
   const stateDir = await tempDir('vc-chatgpt-state-');
   const workspace = await tempDir('vc-chatgpt-ws-');
-  const started = await startBridge({ stateDir, workspace, port: 0, tunnel: false, ...options });
+  const started = await startBridge({ stateDir, workspace, port: 0, tunnel: false, readPlan: async () => PRO_PLAN, ...options });
   let id = 0;
   const post = (body, headers = {}) =>
     fetch(started.url, {
@@ -422,7 +423,12 @@ test('tunnel-client candidates: override, own cache, AI Studio cache (read-only)
 
 test('stdio MCP regression: server.mjs still speaks newline JSON-RPC', async () => {
   const workspace = await tempDir('vc-stdio-');
-  const child = spawn(process.execPath, [join(APP_ROOT, 'mcp', 'server.mjs'), '--workspace', workspace], { stdio: ['pipe', 'pipe', 'pipe'] });
+  const entitlement = join(workspace, 'entitlement.json');
+  await writeFile(entitlement, JSON.stringify({ version: 1, limits: PRO_PLAN, expiresAt: Date.now() + 600_000 }));
+  const child = spawn(process.execPath, [join(APP_ROOT, 'mcp', 'server.mjs'), '--workspace', workspace], {
+    stdio: ['pipe', 'pipe', 'pipe'],
+    env: { ...process.env, VIDEO_CREATOR_ENTITLEMENT_FILE: entitlement },
+  });
   const responses = [];
   let buffer = '';
   child.stdout.on('data', (chunk) => {

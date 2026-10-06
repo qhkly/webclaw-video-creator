@@ -6,6 +6,7 @@ import { basename, join, resolve } from 'node:path';
 import { listBrandProfiles, loadBrandProfile } from './brand.mjs';
 import { exists, findFfmpeg, isProjectId, lastJsonLine, run, runScript, scriptError, ToolError } from './context.mjs';
 import { extensionFor, generateWithOpenAIOAuth, IMAGE_ASPECTS, normalizeImage } from './image-gen.mjs';
+import { limitArgs } from '../scripts/lib/plan.mjs';
 import { getProvider, listProviders, providerIds } from './providers.mjs';
 import { SCENE_TEMPLATES, validateScenes } from './scenes.mjs';
 
@@ -298,7 +299,7 @@ export const tools = [
       properties: {
         project: PROJECT_ARG,
         aspect: { type: 'string', enum: ['16:9', '9:16', '1:1'], description: 'Default: brand visual.aspect.' },
-        resolution: { type: 'string', enum: ['720p', '1080p', '4K'], description: 'Default 1080p.' },
+        resolution: { type: 'string', enum: ['720p', '1080p', '4K'], description: 'Default 1080p. Capped by the user\'s plan (free: 720p with a watermark).' },
         format: { type: 'string', enum: ['MP4', 'MOV', 'WebM'], description: 'Default MP4.' },
         profile: { type: 'string', description: 'Brand profile supplying aspect/caption defaults, default "default".' },
       },
@@ -306,7 +307,7 @@ export const tools = [
       additionalProperties: false,
     },
     annotations: { ...LOCAL_WRITE, idempotentHint: true },
-    async handler({ project, aspect, resolution, format, profile }, { ctx, progress }) {
+    async handler({ project, aspect, resolution, format, profile }, { ctx, progress, plan }) {
       const { profile: brand } = await loadBrandProfile(ctx, profile || 'default');
       const dir = ctx.projectDir(project);
       const scenesPath = join(dir, 'scenes.json');
@@ -326,6 +327,8 @@ export const tools = [
           '--resolution', resolution || '1080p',
           '--format', format || 'MP4',
           '--captions', JSON.stringify(brand.captions),
+          // The plan's export limits apply to agent renders too (render.mjs defaults to free).
+          ...limitArgs(plan),
         ],
         {
           onStdoutLine(line) {

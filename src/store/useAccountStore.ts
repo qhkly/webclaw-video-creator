@@ -1,6 +1,17 @@
+import { useMemo } from 'react';
 import { create } from 'zustand';
 import * as bridge from '../lib/account-bridge';
-import { PURCHASE_POLL_MS, PURCHASE_WATCH_MS, featureAccess, type AccountView, type CheckoutPlan, type FeatureAccess, type PaidFeature } from '../lib/membership';
+import {
+  PURCHASE_POLL_MS,
+  PURCHASE_WATCH_MS,
+  featureAccess,
+  planLimits,
+  type AccountView,
+  type CheckoutPlan,
+  type FeatureAccess,
+  type PaidFeature,
+  type PlanLimits,
+} from '../lib/membership';
 
 interface AccountStore {
   account: AccountView | null;
@@ -117,6 +128,12 @@ export function startAccountSync(): () => void {
     document.removeEventListener('visibilitychange', onVisibility);
     window.clearInterval(poll);
   };
+}
+
+/** Current plan limits; free until the account has loaded (or if it never does). */
+export function usePlanLimits(): PlanLimits {
+  const account = useAccountStore((state) => state.account);
+  return useMemo(() => planLimits(account), [account]);
 }
 
 export function useFeatureAccess(feature: PaidFeature): FeatureAccess {

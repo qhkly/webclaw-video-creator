@@ -6,6 +6,7 @@ import { test } from 'node:test';
 import { approvalFromEnv, needsApproval } from '../mcp/approval.mjs';
 import { createContext } from '../mcp/context.mjs';
 import { createMcpServer } from '../mcp/protocol.mjs';
+const PRO_PLAN = { maxExportHeight: 2160, watermark: false, aiDirector: true, aiCutCleanup: true, commercialUse: true };
 import { tools } from '../mcp/tools.mjs';
 import { parseAgentLine } from '../src/lib/agent-events.ts';
 
@@ -14,7 +15,7 @@ const SCENE = { id: 's1', title: 'T', text: '', narration: 'n', template: 'Title
 async function gatedServer(mode) {
   const workspace = await mkdtemp(join(tmpdir(), 'vc-approval-'));
   const dir = join(workspace, 'approvals');
-  const server = createMcpServer({ tools, ctx: createContext({ workspace }), approval: { dir, mode, timeoutMs: 3000, pollMs: 20 } });
+  const server = createMcpServer({ tools, ctx: createContext({ workspace }), approval: { dir, mode, timeoutMs: 3000, pollMs: 20 }, readPlan: async () => PRO_PLAN });
   let id = 0;
   const call = (name, args) => server.handle({ jsonrpc: '2.0', id: ++id, method: 'tools/call', params: { name, arguments: args } }).then((r) => r.result);
   return { dir, call };

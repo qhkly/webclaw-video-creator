@@ -7,7 +7,9 @@ App 内登录与会员状态读取。支付全部由 webclaw-store 负责，App 
 | 层 | 文件 |
 |---|---|
 | 登录、存储、会员刷新（Rust） | `src-tauri/src/commands/account_commands.rs`（所有外部地址和规则集中在文件顶部） |
-| 会员模型与功能门控（纯 TS，有单测） | `src/lib/membership.ts` |
+| 套餐限制（权威，Rust） | `account_commands.rs` 的 `limits_for` / `current_limits`，由导出、渲染、Agent 命令调用 |
+| 套餐限制（Node 侧） | `scripts/lib/plan.mjs`（sidecar 参数、entitlement 文件、分辨率与水印计算） |
+| 会员模型与 UI 门控（纯 TS，有单测） | `src/lib/membership.ts` |
 | 状态与生命周期（zustand） | `src/store/useAccountStore.ts` |
 | UI | `src/components/AccountPanel.tsx`（侧栏卡片、设置页「账户与会员」、门控提示） |
 | 账户服务（Cloudflare Worker） | `account-service/`（部署说明见 `account-service/README.md`） |
@@ -53,7 +55,7 @@ App ──打开浏览器──▶ store.qhkly.com/checkout?product=webclaw-vide
    计划域名 `video-api.qhkly.com` **尚未开通**：wrangler 里的自定义域名路由是注释状态，开通并确认
    `/healthz` 正常后，再用 `VIDEO_CREATOR_ACCOUNT_API_URL=https://video-api.qhkly.com npm run tauri:build`
    构建（正式构建只接受 https，编译期写入，包里不含任何 secret）。未配置时 App 显示「会员服务尚未开通」，
-   所有功能照常可用。
+   按免费版运行（手工剪辑可用，导出最高 720p 带水印，AI 能力不可用）。
 
 ## 账户服务契约（App 侧已实现）
 
@@ -86,23 +88,49 @@ App ──打开浏览器──▶ store.qhkly.com/checkout?product=webclaw-vide
   `https://store.qhkly.com/checkout?product=webclaw-video-creator&plan=pro-monthly|pro-yearly`。
   价格不写死在 App 里，以商店页面为准。退订后（`renewal=cancelled`）、微信一次性付款会到期的会员
   （`renewal=one_time` 且有 `expiresAt`）、以及旧试用权益仍显示购买 / 续费入口。
-- **权益**：门控读 store 下发的机读权益 `benefits`（`aiDirector`、`maxExportHeight` 等），读不到的字段按没有该权益处理。
+- **权益**：门控只读 store 下发的机读权益 `benefits`，见下节。
 - **退出**：删除本地 `account.json`，尽力吊销服务端会话。浏览器里 auth.qhkly.com 的登录 Cookie 保留，
   下次登录可一键完成（与 Voice Master 一致）。
 
-## 待产品决策（代码里已留好开关，没有擅自定规则）
+## 免费版 / Pro 与门控
 
-1. **是否开启门控、免费版限制。** store 文档的推荐默认是：免费版 720p 带水印，AI 导演与 AI 一键清理不可用。
-   门控已接在「导出 4K」（`export.4k`，读 `maxExportHeight`）和「AI 导演」（`agent.director`，读 `aiDirector`）两处，
-   但 `MEMBERSHIP_POLICY.enforce = false`：当前版本不拦截任何功能，只展示账户与升级入口。
-   确认后修改 `src/lib/membership.ts` 的 `enforce` 和 `PAID_FEATURES`。水印、720p 上限、AI 一键清理目前还没有门控点，
-   需要单独接入。门控在客户端，只是体验层限制，不能当作防破解手段。
-2. **离线宽限期。** 按 store 契约 fail closed，只在 60 秒内沿用「是会员」（`OFFLINE_GRACE_SECS`）。
+| 能力 | 免费版 | Pro（store `benefits`） |
+|---|---|---|
+| 手工文字剪辑、场景编辑、预览 | 可用 | 可用 |
+| 导出分辨率（短边） | 最高 720p | `maxExportHeight`（4K = 2160） |
+| 水印 | 必带 WebClaw Video Creator 水印 | `watermarkFree: true` 时无 |
+| AI 导演（Agent CLI、ChatGPT 调用视频工具） | 不可用 | `aiDirector: true` |
+| 文字剪辑 AI 一键清理（去语气词、删长停顿） | 不可用 | `aiCutCleanup: true` |
+| 商用授权 | 仅个人使用 | `commercialUse: true`（只做展示，见下） |
+
+**判定只有一处**：Rust `limits_for(entitled, membership)`。未登录、非会员、会话过期、服务不可用超过 60 秒宽限、
+或会员但 `benefits` 缺失 / 字段类型不对，一律得到免费版限制（fail closed，逐字段判断）。登录或会员查询出错
+不会影响免费版能力：这些路径从不依赖账户，只会拿到免费版限制。
+
+**实际执行点**（不是只藏 UI）：
+
+| 能力 | 执行入口 | 检查 |
+|---|---|---|
+| 场景渲染分辨率 + 水印 | `render_video`（Rust）→ `scripts/render.mjs`（Remotion） | Rust 按套餐钳制 `--resolution`，传 `--maxHeight` / `--watermark`；`render.mjs` 缺参数时默认免费版，再钳制一次；水印是 Remotion 合成里的一层（`remotion/src/Watermark.tsx`），渲进每一帧 |
+| 文字剪辑导出分辨率 + 水印 | `export_cut`（Rust）→ `scripts/cut-export.mjs`（FFmpeg） | 同上传参；FFmpeg 在 concat 之后 `scale` 到短边 ≤ 限制，再用 `overlay` 叠 `scripts/assets/watermark.png`（不依赖系统字体） |
+| AI 导演：Agent | `agent_start`（Rust） | 没有 `aiDirector` 直接拒绝启动 |
+| AI 导演：MCP 工具（Agent CLI、ChatGPT 隧道） | `mcp/protocol.mjs` 的每一次 `tools/call` | 读 Rust 写的 `<app config>/entitlement.json`（`VIDEO_CREATOR_ENTITLEMENT_FILE`，15 分钟过期，后台每 5 分钟刷新会员并重写）；没有文件、过期、格式不对或 `aiDirector` 不是 `true` → 拒绝调用。`tools/list` 仍开放；`video_render` 也把套餐限制传给 `render.mjs` |
+| AI 一键清理 | `CutterPage` 的 `applySuggestion` | 这是纯前端的本地启发式，结果就是普通的剪切区间，命令层无法区分它和手工剪辑，所以门控在前端（按钮禁用 + 函数内检查）。这是它唯一的真实执行点 |
+| 商用授权 | 无 | 架构里没有可执行的技术点，只在「账户与会员」展示，不虚构限制 |
+
+预览（Remotion Player）对免费版同样显示水印，所见即所得。
+
+边界：以上都在用户自己的机器上执行，能挡住 App 内的所有路径（UI、命令、Agent、ChatGPT），但挡不住改源码或改本地文件的人；
+真正不可绕过的只有服务端（账户服务与 store）给出的会员结论。
+
+## 待产品决策
+
+1. **离线宽限期。** 按 store 契约 fail closed，只在 60 秒内沿用「是会员」（`OFFLINE_GRACE_SECS`）。
    桌面 App 断网时 Pro 功能会立即按免费版处理；如果要给离线用户更长宽限，需要产品确认后调大这个常量。
-3. **价格。** store 文档标注价格是「推荐默认值、未最终拍板」，App 不显示价格，以商店页为准。
-4. **会话时长。** 账户服务会话 7 天、续期最长到首次登录后 30 天，之后需要重新登录（`SESSION_TTL_SECONDS` /
+2. **价格。** store 文档标注价格是「推荐默认值、未最终拍板」，App 不显示价格，以商店页为准。
+3. **会话时长。** 账户服务会话 7 天、续期最长到首次登录后 30 天，之后需要重新登录（`SESSION_TTL_SECONDS` /
    `SESSION_MAX_AGE_SECONDS`）。
-5. **结账回跳。** store 的 `returnTo` 只接受 `*.qhkly.com`，不能直接跳回 App。目前靠窗口焦点刷新和轮询感知购买完成；
+4. **结账回跳。** store 的 `returnTo` 只接受 `*.qhkly.com`，不能直接跳回 App。目前靠窗口焦点刷新和轮询感知购买完成；
    如果希望支付后自动回到 App，需要注册自定义 URL scheme（deep link），并在 store 端加白名单。
-6. **账号不一致。** 商店在浏览器里自己走一次 auth 登录。如果用户在浏览器里登录了另一个账号，会员会记到那个账号上。
+5. **账号不一致。** 商店在浏览器里自己走一次 auth 登录。如果用户在浏览器里登录了另一个账号，会员会记到那个账号上。
    界面已提示「请使用同一账号付款」。如需强制一致，store 结账页要支持登录提示参数（比如 `login_hint`）。

@@ -3,6 +3,7 @@
 // HTTP (as webcode-ai-studio does) without touching tool code.
 import { needsApproval, requestApproval } from './approval.mjs';
 import { ToolError } from './context.mjs';
+import { planFromEnv } from '../scripts/lib/plan.mjs';
 
 export const SUPPORTED_PROTOCOL_VERSIONS = ['2025-06-18', '2025-11-25', '2025-03-26', '2024-11-05'];
 /** Stateless MCP era used by the OpenAI tunnel ("discover first, then plain requests"; no initialize). */
@@ -20,7 +21,18 @@ export const SERVER_INSTRUCTIONS = [
   'Relative paths resolve inside the workspace; outputs are always written inside the workspace.',
 ].join(' ');
 
-export function createMcpServer({ tools, ctx, approval = null, log = () => {} }) {
+/** Shown to ChatGPT / the agent CLI when a free install calls a tool. */
+export const PRO_REQUIRED_MESSAGE =
+  'AI Director (ChatGPT / agent CLIs driving the video tools) is a WebClaw Video Creator Pro feature. ' +
+  'Ask the user to sign in and upgrade in the app (Settings → Account & membership). ' +
+  'AI 导演是 Pro 功能：请在应用「设置 → 账户与会员」登录并升级后重试。';
+
+/**
+ * `readPlan` returns the plan limits (scripts/lib/plan.mjs). By default it reads the entitlement
+ * file the app writes (VIDEO_CREATOR_ENTITLEMENT_FILE) on every call, so a membership change
+ * applies to long-running servers too, and a missing or stale file means the free plan.
+ */
+export function createMcpServer({ tools, ctx, approval = null, log = () => {}, readPlan = planFromEnv }) {
   const byName = new Map(tools.map((tool) => [tool.name, tool]));
 
   async function handle(message, notify = () => {}) {
@@ -96,11 +108,16 @@ export function createMcpServer({ tools, ctx, approval = null, log = () => {} })
       }
     };
     try {
+      // Every tool here is the AI Director's toolset; listing stays open, calling needs Pro.
+      const plan = await readPlan();
+      if (plan?.aiDirector !== true) {
+        throw new ToolError(PRO_REQUIRED_MESSAGE);
+      }
       validateArgs(tool.inputSchema, args);
       if (approval && needsApproval(tool, approval.mode)) {
         await requestApproval(approval, tool, args);
       }
-      const value = await tool.handler(args, { ctx, progress, log });
+      const value = await tool.handler(args, { ctx, progress, log, plan });
       return {
         content: [{ type: 'text', text: JSON.stringify(value, null, 2) }],
         structuredContent: value,

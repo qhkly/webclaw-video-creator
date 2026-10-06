@@ -32,6 +32,9 @@ import {
   type TranscriptSegment,
 } from '../lib/cut-plan';
 import { allowMediaPreview, exportCut, onCutterProgress, transcribeVideo } from '../lib/tauri-bridge';
+import { FeatureGateNotice, useGate } from '../components/AccountPanel';
+import { usePlanLimits } from '../store/useAccountStore';
+import { useI18n } from '../i18n';
 import { useCutterStore } from '../store/useCutterStore';
 import { useVideoStore } from '../store/useVideoStore';
 import type { CutterProgress } from '../types';
@@ -45,6 +48,9 @@ export default function CutterPage() {
   const asr = useVideoStore((state) => state.settings.asr);
   const { videoPath, transcript, cuts, past, future } = useCutterStore();
   const { loadVideo, setTranscript, toggleCuts, cutUnits, restoreUnits, revertAi, editSegmentText, undo, redo } = useCutterStore();
+  const { t } = useI18n();
+  const cleanupGate = useGate('cutter.aiCleanup');
+  const planLimits = usePlanLimits();
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const transcriptRef = useRef<HTMLDivElement>(null);
@@ -284,6 +290,10 @@ export default function CutterPage() {
   };
 
   const applySuggestion = (kind: 'fillers' | 'pauses') => {
+    // AI cleanup is a local heuristic whose result is ordinary cut ranges, so this is its gate.
+    if (!cleanupGate.allowed) {
+      return;
+    }
     const ids = suggestCuts(units, kind === 'fillers' ? { fillers: true } : { pausesLongerThan: PAUSE_THRESHOLD });
     if (ids.length === 0) {
       setProgress({ task: 'transcribe', percent: 100, message: kind === 'fillers' ? '没有发现语气词' : '没有发现长停顿' });
@@ -413,6 +423,7 @@ export default function CutterPage() {
                 </p>
               )}
               {exported && <p className="result-path">已导出：{exported}</p>}
+              {planLimits.watermark && <p className="account-note">{t.account.freeExportNote}</p>}
               <div className="cutter-buttons">
                 <button className="btn btn-ghost btn-sm" onClick={importVideo} disabled={Boolean(busy)}>
                   <FileVideo size={14} />
@@ -450,10 +461,10 @@ export default function CutterPage() {
             {transcript && (
               <div className="cutter-ai">
                 <Sparkles size={13} />
-                <button className="btn btn-soft btn-sm" onClick={() => applySuggestion('fillers')}>
+                <button className="btn btn-soft btn-sm" disabled={!cleanupGate.allowed} onClick={() => applySuggestion('fillers')}>
                   去语气词
                 </button>
-                <button className="btn btn-soft btn-sm" onClick={() => applySuggestion('pauses')}>
+                <button className="btn btn-soft btn-sm" disabled={!cleanupGate.allowed} onClick={() => applySuggestion('pauses')}>
                   删长停顿 &gt;{PAUSE_THRESHOLD}s
                 </button>
                 {aiCount > 0 && (
@@ -464,6 +475,7 @@ export default function CutterPage() {
                 )}
               </div>
             )}
+            {transcript && <FeatureGateNotice access={cleanupGate.access} message={t.account.proOnly.cleanup} />}
             {transcript?.warning && (
               <p className="cutter-warning">
                 <AlertTriangle size={14} />

@@ -23,7 +23,7 @@ use sha2::{Digest, Sha256};
 use std::path::PathBuf;
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{AppHandle, Emitter, Manager, Runtime as TauriRuntime};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 
@@ -62,6 +62,9 @@ const HTTP_TIMEOUT: Duration = Duration::from_secs(15);
 const MAX_REQUEST_HEAD: usize = 8 * 1024;
 
 pub const ACCOUNT_CHANGED_EVENT: &str = "account_changed";
+/// The entitlement file lives this long; the background refresh rewrites it well before.
+const ENTITLEMENT_FILE_TTL: Duration = Duration::from_secs(15 * 60);
+const BACKGROUND_REFRESH: Duration = Duration::from_secs(5 * 60);
 
 /// Debug builds may point at local servers; release builds are pinned, because
 /// login and paid status hang off these URLs.
@@ -124,6 +127,74 @@ pub struct Membership {
     pub benefits: Option<Value>,
 }
 
+/// What this install may do right now. Derived only from the store's machine-readable
+/// `benefits` of an entitled membership; anything missing or malformed falls back to the
+/// free value (fail closed). Applied by the export/render/agent commands and handed to the
+/// Node side (sidecar args, entitlement file). Mirrors scripts/lib/plan.mjs.
+#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct PlanLimits {
+    /// Short side of the exported frame in pixels (the app's 720p / 1080p / 4K presets).
+    pub max_export_height: u32,
+    pub watermark: bool,
+    pub ai_director: bool,
+    pub ai_cut_cleanup: bool,
+    /// Licensing only: shown in the UI, nothing technical depends on it.
+    pub commercial_use: bool,
+}
+
+pub const FREE_LIMITS: PlanLimits = PlanLimits {
+    max_export_height: 720,
+    watermark: true,
+    ai_director: false,
+    ai_cut_cleanup: false,
+    commercial_use: false,
+};
+
+const MIN_EXPORT_HEIGHT: u64 = 720;
+const MAX_EXPORT_HEIGHT: u64 = 2160;
+
+pub fn limits_for(entitled: bool, membership: Option<&Membership>) -> PlanLimits {
+    if !entitled {
+        return FREE_LIMITS;
+    }
+    let Some(benefits) = membership.and_then(|m| m.benefits.as_ref()).and_then(Value::as_object) else {
+        return FREE_LIMITS;
+    };
+    let granted = |key: &str| benefits.get(key).and_then(Value::as_bool) == Some(true);
+    PlanLimits {
+        max_export_height: benefits
+            .get("maxExportHeight")
+            .and_then(Value::as_u64)
+            .map(|height| height.clamp(MIN_EXPORT_HEIGHT, MAX_EXPORT_HEIGHT) as u32)
+            .unwrap_or(FREE_LIMITS.max_export_height),
+        watermark: !granted("watermarkFree"),
+        ai_director: granted("aiDirector"),
+        ai_cut_cleanup: granted("aiCutCleanup"),
+        commercial_use: granted("commercialUse"),
+    }
+}
+
+/// Render presets and their short side. Unknown requests are treated as 1080p.
+const RESOLUTION_PRESETS: [(&str, u32); 3] = [("720p", 720), ("1080p", 1080), ("4K", 2160)];
+
+/// Highest preset that is ≤ both the request and the plan limit.
+pub fn clamp_resolution(requested: &str, max_height: u32) -> &'static str {
+    let want = RESOLUTION_PRESETS.iter().find(|(name, _)| *name == requested).map_or(1080, |(_, h)| *h);
+    let limit = want.min(max_height);
+    RESOLUTION_PRESETS.iter().rev().find(|(_, h)| *h <= limit).map_or("720p", |(name, _)| *name)
+}
+
+/// Sidecar arguments understood by scripts/render.mjs and scripts/cut-export.mjs.
+pub fn limit_args(limits: &PlanLimits) -> Vec<String> {
+    vec![
+        "--maxHeight".to_string(),
+        limits.max_export_height.to_string(),
+        "--watermark".to_string(),
+        if limits.watermark { "1" } else { "0" }.to_string(),
+    ]
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct AppSession {
@@ -175,6 +246,8 @@ pub struct AccountView {
     phase: MembershipPhase,
     /// The single answer feature gates should use.
     entitled: bool,
+    /// Plan limits derived from `entitled` + the store benefits; what the commands enforce.
+    limits: PlanLimits,
     service_configured: bool,
     last_error: Option<String>,
     product_slug: &'static str,
@@ -344,6 +417,7 @@ fn parse_callback(head: &str, expected_state: &str) -> Callback {
 
 fn build_view(stored: &StoredAccount, rt: &Runtime, configured: bool, now: u64) -> AccountView {
     let phase = phase_for(stored.user.is_some(), configured, stored.session.is_some(), rt.phase);
+    let entitled = is_entitled(phase, stored.membership.as_ref(), stored.membership_checked_at, now);
     AccountView {
         login_status: rt.login_status,
         login_error: rt.login_error.clone(),
@@ -352,7 +426,8 @@ fn build_view(stored: &StoredAccount, rt: &Runtime, configured: bool, now: u64) 
         membership: stored.membership.clone(),
         membership_checked_at: stored.membership_checked_at,
         phase,
-        entitled: is_entitled(phase, stored.membership.as_ref(), stored.membership_checked_at, now),
+        entitled,
+        limits: limits_for(entitled, stored.membership.as_ref()),
         service_configured: configured,
         last_error: rt.last_error.clone(),
         product_slug: PRODUCT_SLUG,
@@ -362,14 +437,14 @@ fn build_view(stored: &StoredAccount, rt: &Runtime, configured: bool, now: u64) 
 
 // ---- Storage ----
 
-fn account_path(app: &AppHandle) -> Result<PathBuf, String> {
+fn account_path<R: TauriRuntime>(app: &AppHandle<R>) -> Result<PathBuf, String> {
     app.path()
         .app_data_dir()
         .map(|dir| dir.join("account.json"))
         .map_err(|error| format!("无法定位应用数据目录: {error}"))
 }
 
-async fn load(app: &AppHandle) -> StoredAccount {
+async fn load<R: TauriRuntime>(app: &AppHandle<R>) -> StoredAccount {
     let Ok(path) = account_path(app) else {
         return StoredAccount::default();
     };
@@ -395,16 +470,70 @@ async fn save(app: &AppHandle, account: &StoredAccount) -> Result<(), String> {
     tokio::fs::rename(&tmp, &path).await.map_err(|error| format!("无法保存登录状态: {error}"))
 }
 
-async fn current_view(app: &AppHandle) -> AccountView {
+async fn current_view<R: TauriRuntime>(app: &AppHandle<R>) -> AccountView {
     let stored = load(app).await;
     let configured = account_api_url().is_some();
     with_runtime(|rt| build_view(&stored, rt, configured, now_secs()))
 }
 
+/// The limits commands must enforce, computed from local state only (never from the UI).
+pub async fn current_limits<R: TauriRuntime>(app: &AppHandle<R>) -> PlanLimits {
+    current_view(app).await.limits
+}
+
 async fn emit_changed(app: &AppHandle) -> AccountView {
     let view = current_view(app).await;
+    write_entitlement_file(app, &view.limits).await;
     let _ = app.emit(ACCOUNT_CHANGED_EVENT, &view);
     view
+}
+
+/// <app config dir>/entitlement.json — read by the MCP servers (agent CLIs, ChatGPT bridge)
+/// on every tool call via VIDEO_CREATOR_ENTITLEMENT_FILE. Outside the video workspace on
+/// purpose: agents write in the workspace, not here.
+pub fn entitlement_file_path<R: TauriRuntime>(app: &AppHandle<R>) -> Result<PathBuf, String> {
+    app.path()
+        .app_config_dir()
+        .map(|dir| dir.join("entitlement.json"))
+        .map_err(|error| format!("无法定位应用配置目录: {error}"))
+}
+
+fn entitlement_document(limits: &PlanLimits, now_ms: u128) -> Value {
+    json!({
+        "version": 1,
+        "limits": limits,
+        "issuedAt": now_ms,
+        "expiresAt": now_ms + ENTITLEMENT_FILE_TTL.as_millis(),
+    })
+}
+
+async fn write_entitlement_file<R: TauriRuntime>(app: &AppHandle<R>, limits: &PlanLimits) {
+    let Ok(path) = entitlement_file_path(app) else {
+        return;
+    };
+    if let Some(dir) = path.parent() {
+        let _ = tokio::fs::create_dir_all(dir).await;
+    }
+    let now_ms = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_millis()).unwrap_or(0);
+    let tmp = path.with_extension("json.tmp");
+    if tokio::fs::write(&tmp, entitlement_document(limits, now_ms).to_string()).await.is_ok() {
+        let _ = tokio::fs::rename(&tmp, &path).await;
+    }
+}
+
+/// At startup and every few minutes: re-check membership and rewrite the entitlement file,
+/// so long-running MCP servers never act on a stale plan and a lapsed membership is noticed
+/// even while the window is in the background.
+pub fn start_background_sync(app: AppHandle) {
+    tauri::async_runtime::spawn(async move {
+        // The file left by the previous run must not outlive it.
+        emit_changed(&app).await;
+        loop {
+            tokio::time::sleep(BACKGROUND_REFRESH).await;
+            refresh_membership(&app, false).await;
+            emit_changed(&app).await;
+        }
+    });
 }
 
 // ---- HTTP ----
@@ -952,9 +1081,60 @@ mod tests {
         };
         let view = build_view(&stored, &rt, true, 100);
         assert!(view.entitled);
+        // Entitled but these test benefits are empty: limits stay free.
+        assert_eq!(view.limits, FREE_LIMITS);
         let text = serde_json::to_string(&view).unwrap();
         assert!(!text.contains("secret-session-token"));
         assert!(text.contains("\"phase\":\"fresh\""));
+    }
+
+    fn with_benefits(benefits: Value) -> Membership {
+        Membership { benefits: Some(benefits), ..member(true) }
+    }
+
+    #[test]
+    fn limits_follow_store_benefits_and_fail_closed() {
+        let pro = with_benefits(json!({"watermarkFree": true, "maxExportHeight": 2160, "aiDirector": true,
+            "aiCutCleanup": true, "commercialUse": true}));
+        assert_eq!(
+            limits_for(true, Some(&pro)),
+            PlanLimits { max_export_height: 2160, watermark: false, ai_director: true, ai_cut_cleanup: true, commercial_use: true }
+        );
+        // Not entitled: free, whatever the cached benefits say.
+        assert_eq!(limits_for(false, Some(&pro)), FREE_LIMITS);
+        // Entitled but no / unreadable benefits: free.
+        assert_eq!(limits_for(true, Some(&member(true))), FREE_LIMITS);
+        assert_eq!(limits_for(true, Some(&with_benefits(json!("pro")))), FREE_LIMITS);
+        assert_eq!(limits_for(true, None), FREE_LIMITS);
+        // Field by field: wrong types are "not granted".
+        let odd = limits_for(true, Some(&with_benefits(json!({"watermarkFree": "true", "maxExportHeight": "2160", "aiDirector": 1}))));
+        assert_eq!(odd, FREE_LIMITS);
+        // Height is clamped into [720, 2160]; a member is never below the free plan.
+        assert_eq!(limits_for(true, Some(&with_benefits(json!({"maxExportHeight": 1080})))).max_export_height, 1080);
+        assert_eq!(limits_for(true, Some(&with_benefits(json!({"maxExportHeight": 99999})))).max_export_height, 2160);
+        assert_eq!(limits_for(true, Some(&with_benefits(json!({"maxExportHeight": 100})))).max_export_height, 720);
+        assert_eq!(limits_for(true, Some(&with_benefits(json!({"maxExportHeight": -1})))).max_export_height, 720);
+    }
+
+    #[test]
+    fn resolution_is_clamped_to_the_plan() {
+        assert_eq!(clamp_resolution("4K", 720), "720p");
+        assert_eq!(clamp_resolution("1080p", 720), "720p");
+        assert_eq!(clamp_resolution("720p", 720), "720p");
+        assert_eq!(clamp_resolution("4K", 1080), "1080p");
+        assert_eq!(clamp_resolution("4K", 2160), "4K");
+        assert_eq!(clamp_resolution("1080p", 2160), "1080p");
+        assert_eq!(clamp_resolution("8K; rm -rf", 2160), "1080p");
+        assert_eq!(clamp_resolution("", 720), "720p");
+        assert_eq!(limit_args(&FREE_LIMITS), ["--maxHeight", "720", "--watermark", "1"]);
+    }
+
+    #[test]
+    fn entitlement_document_matches_the_node_reader() {
+        let doc = entitlement_document(&FREE_LIMITS, 1_000);
+        assert_eq!(doc["version"], 1);
+        assert_eq!(doc["expiresAt"], 1_000 + ENTITLEMENT_FILE_TTL.as_millis() as u64);
+        assert_eq!(doc["limits"], json!({"maxExportHeight": 720, "watermark": true, "aiDirector": false, "aiCutCleanup": false, "commercialUse": false}));
     }
 
     #[test]

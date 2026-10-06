@@ -29,6 +29,7 @@ pub fn run() {
                 let _ = std::fs::create_dir_all(&dir);
                 let _ = app.asset_protocol_scope().allow_directory(&dir, true);
             }
+            commands::account_commands::start_background_sync(app.handle().clone());
             commands::chatgpt_commands::autostart(app.handle());
             Ok(())
         })

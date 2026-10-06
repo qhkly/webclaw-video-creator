@@ -1,6 +1,7 @@
 import { ExternalLink, Loader2, Play, PlugZap, Save, Square } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { useI18n } from '../i18n';
+import { FeatureGateNotice, useGate } from './AccountPanel';
 import {
   CHATGPT_RUN_ID,
   OPENAI_API_KEY_CONSOLE_URL,
@@ -24,6 +25,8 @@ const POLL_MS = 2000;
 /** Settings card for the ChatGPT connection (local HTTP MCP on 32159 + OpenAI Secure Tunnel). */
 export default function ChatgptConnectionCard() {
   const { t } = useI18n();
+  // The bridge itself may run; every tool call is checked against the plan by the MCP server.
+  const directorGate = useGate('agent.director');
   const c = t.chatgpt;
   const [info, setInfo] = useState<ChatgptStatus | null>(null);
   const [approvals, setApprovals] = useState<ApprovalRequest[]>([]);
@@ -114,6 +117,7 @@ export default function ChatgptConnectionCard() {
         {c.title}
       </span>
       <p className="settings-hint">{c.desc}</p>
+      <FeatureGateNotice access={directorGate.access} message={t.account.proOnly.chatgpt} />
 
       <div className="chatgpt-status">
         <span className={`pill ${pillClass}`}>
