@@ -1,5 +1,5 @@
-import { Check, Palette, X } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { Check, Monitor, Moon, Palette, Sun, X } from 'lucide-react';
+import { useLayoutEffect, useMemo, useState } from 'react';
 
 const STORAGE_KEY = 'webclaw-video-creator-theme';
 
@@ -68,56 +68,97 @@ const RADII = {
   round: { label: '圆润', values: ['10px', '14px', '18px', '24px'] },
 } as const;
 
+const MODES = {
+  light: { label: '浅色', icon: Sun },
+  dark: { label: '深色', icon: Moon },
+  system: { label: '系统', icon: Monitor },
+} as const;
+
 type AccentKey = keyof typeof ACCENTS;
 type RadiusKey = keyof typeof RADII;
+type ThemeMode = keyof typeof MODES;
+type ResolvedThemeMode = Exclude<ThemeMode, 'system'>;
 
 interface ThemePrefs {
   accent: AccentKey;
   radius: RadiusKey;
+  mode: ThemeMode;
 }
 
 const DEFAULT_PREFS: ThemePrefs = {
   accent: 'indigo',
   radius: 'medium',
+  mode: 'light',
 };
 
-function readPrefs(): ThemePrefs {
+const readPrefs = (): ThemePrefs => {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     const parsed = raw ? (JSON.parse(raw) as Partial<ThemePrefs>) : {};
     return {
       accent: parsed.accent && parsed.accent in ACCENTS ? parsed.accent : DEFAULT_PREFS.accent,
       radius: parsed.radius && parsed.radius in RADII ? parsed.radius : DEFAULT_PREFS.radius,
+      mode: parsed.mode && parsed.mode in MODES ? parsed.mode : DEFAULT_PREFS.mode,
     };
   } catch {
     return DEFAULT_PREFS;
   }
-}
+};
 
-function applyTheme(prefs: ThemePrefs) {
+const resolveThemeMode = (mode: ThemeMode): ResolvedThemeMode => {
+  if (mode !== 'system') {
+    return mode;
+  }
+
+  return window.matchMedia?.('(prefers-color-scheme: dark)')?.matches ? 'dark' : 'light';
+};
+
+const applyTheme = (prefs: ThemePrefs) => {
   const accent = ACCENTS[prefs.accent];
   const [sm, md, lg, xl] = RADII[prefs.radius].values;
-  const root = document.documentElement.style;
+  const resolvedMode = resolveThemeMode(prefs.mode);
+  const root = document.documentElement;
+  const style = root.style;
 
-  root.setProperty('--accent', accent.accent);
-  root.setProperty('--accent-ink', accent.ink);
-  root.setProperty('--accent-deep', accent.deep);
-  root.setProperty('--accent-tint', accent.tint);
-  root.setProperty('--accent-tint-2', accent.tint2);
-  root.setProperty('--r-sm', sm);
-  root.setProperty('--r-md', md);
-  root.setProperty('--r-lg', lg);
-  root.setProperty('--r-xl', xl);
-}
+  root.dataset.theme = resolvedMode;
+  root.dataset.themePreference = prefs.mode;
+  style.colorScheme = resolvedMode;
+
+  style.setProperty('--accent', accent.accent);
+  if (resolvedMode === 'dark') {
+    style.setProperty('--accent-ink', `color-mix(in srgb, ${accent.accent} 86%, white)`);
+    style.setProperty('--accent-deep', `color-mix(in srgb, ${accent.accent} 70%, white)`);
+    style.setProperty('--accent-tint', `color-mix(in srgb, ${accent.accent} 14%, var(--surface))`);
+    style.setProperty('--accent-tint-2', `color-mix(in srgb, ${accent.accent} 23%, var(--surface))`);
+  } else {
+    style.setProperty('--accent-ink', accent.ink);
+    style.setProperty('--accent-deep', accent.deep);
+    style.setProperty('--accent-tint', accent.tint);
+    style.setProperty('--accent-tint-2', accent.tint2);
+  }
+  style.setProperty('--r-sm', sm);
+  style.setProperty('--r-md', md);
+  style.setProperty('--r-lg', lg);
+  style.setProperty('--r-xl', xl);
+};
 
 export default function ThemePanel() {
   const [open, setOpen] = useState(false);
   const [prefs, setPrefs] = useState<ThemePrefs>(() => readPrefs());
   const currentAccent = useMemo(() => ACCENTS[prefs.accent], [prefs.accent]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     applyTheme(prefs);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(prefs));
+
+    if (prefs.mode !== 'system') {
+      return undefined;
+    }
+
+    const media = window.matchMedia('(prefers-color-scheme: dark)');
+    const handleSystemThemeChange = () => applyTheme(prefs);
+    media.addEventListener('change', handleSystemThemeChange);
+    return () => media.removeEventListener('change', handleSystemThemeChange);
   }, [prefs]);
 
   const updatePrefs = (patch: Partial<ThemePrefs>) => {
@@ -126,22 +167,41 @@ export default function ThemePanel() {
 
   return (
     <>
-      <button className="btn btn-ghost btn-sm" onClick={() => setOpen(true)} title="打开调色面板">
+      <button className="btn btn-ghost btn-sm" onClick={() => setOpen(true)} title="打开主题设置">
         <Palette size={14} />
         主题
       </button>
       {open && (
-        <div className="theme-panel" role="dialog" aria-label="调色面板">
+        <div className="theme-panel" role="dialog" aria-label="主题设置">
           <div className="theme-panel-head">
             <div>
-              <strong>调色面板</strong>
-              <span>{currentAccent.label} · {RADII[prefs.radius].label}</span>
+              <strong>主题设置</strong>
+              <span>{MODES[prefs.mode].label} · {currentAccent.label} · {RADII[prefs.radius].label}</span>
             </div>
             <button className="theme-close" onClick={() => setOpen(false)} title="关闭">
               <X size={15} />
             </button>
           </div>
           <div className="theme-panel-body">
+            <section className="theme-section">
+              <span className="theme-section-title">明暗模式</span>
+              <div className="theme-mode-segment">
+                {Object.entries(MODES).map(([key, mode]) => {
+                  const Icon = mode.icon;
+                  return (
+                    <button
+                      className={prefs.mode === key ? 'active' : ''}
+                      key={key}
+                      onClick={() => updatePrefs({ mode: key as ThemeMode })}
+                      aria-pressed={prefs.mode === key}
+                    >
+                      <Icon size={13} />
+                      {mode.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </section>
             <section className="theme-section">
               <span className="theme-section-title">主色调</span>
               <div className="swatch-grid">
@@ -163,7 +223,7 @@ export default function ThemePanel() {
               </div>
             </section>
             <section className="theme-section">
-              <span className="theme-section-title">外观</span>
+              <span className="theme-section-title">圆角</span>
               <div className="radius-segment">
                 {Object.entries(RADII).map(([key, radius]) => (
                   <button

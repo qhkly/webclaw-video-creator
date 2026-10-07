@@ -172,7 +172,7 @@
 }
 
 .ev-ok {
-  color: #15803d;
+  color: var(--success);
 }
 
 .ev-fail {
@@ -237,8 +237,8 @@
 }
 
 .pill-warn {
-  background: #fef3c7;
-  color: #92400e;
+  background: var(--warning-bg);
+  color: var(--warning-text);
 }
 
 .agent-video {
