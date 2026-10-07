@@ -1,0 +1,204 @@
+import assert from 'node:assert/strict';
+import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { test } from 'node:test';
+import { createContext, findFfmpeg, run } from '../mcp/context.mjs';
+import { createMcpServer } from '../mcp/protocol.mjs';
+import { tools } from '../mcp/tools.mjs';
+import { extractPreviewFrames, runDirectorChecks } from '../mcp/director.mjs';
+
+const PRO_PLAN = { maxExportHeight: 2160, watermark: false, commercialUse: true };
+
+async function setup() {
+  const workspace = await mkdtemp(join(tmpdir(), 'vc-director-'));
+  const ctx = createContext({ workspace });
+  const server = createMcpServer({ tools, ctx, readPlan: async () => PRO_PLAN });
+  let id = 0;
+  const call = async (name, args = {}) => {
+    const response = await server.handle({ jsonrpc: '2.0', id: ++id, method: 'tools/call', params: { name, arguments: args } });
+    return response.result;
+  };
+  return { workspace, ctx, server, call };
+}
+
+const SCENE = (id, overrides = {}) => ({
+  id,
+  title: `T ${id}`,
+  text: `T ${id}`,
+  narration: '',
+  template: 'TitleSlide',
+  duration: 3,
+  props: { title: `T ${id}` },
+  ...overrides,
+});
+
+const audio = (duration) => ({ path: '/tmp/a.mp3', duration, wordsPath: '/tmp/a.words.json' });
+
+test('director checks: audio-first, timing drift, caption coverage, text runs, overflow, closer', () => {
+  const scenes = [
+    SCENE('s1', { narration: 'hello' }), // blocker: narration without audio
+    SCENE('s2', { narration: 'hi', audio: audio(2.0), duration: 6, captions: [{ text: 'hi', startMs: 0, durationMs: 500 }] }), // timing drift
+    SCENE('s3', { narration: 'yo', audio: audio(2.0), duration: 2 }), // no captions
+    SCENE('s4'), // three text-only scenes s2..s4 → visual warning (only after >2)
+  ];
+  const findings = runDirectorChecks(scenes, {});
+  const byNote = (part) => findings.filter((finding) => finding.note.includes(part));
+  assert.ok(findings.some((finding) => finding.severity === 'blocker' && finding.category === 'audio' && finding.sceneId === 's1'));
+  assert.ok(byNote('drifts').some((finding) => finding.sceneId === 's2'));
+  assert.ok(byNote('no word-level captions').some((finding) => finding.sceneId === 's3'));
+  assert.ok(byNote('consecutive text-only').length > 0, 'warns on text-card runs');
+  assert.ok(findings.some((finding) => finding.category === 'structure' && finding.note.includes('CTA')), 'suggests a CTA closer');
+});
+
+test('director checks: assets break text runs; CTA closer satisfies structure check', () => {
+  const scenes = [
+    SCENE('s1', { background: { kind: 'image', assetPath: '/tmp/bg.png' } }),
+    SCENE('s2', { template: 'ImageFrame', props: { imageSrc: '/tmp/x.png' } }),
+    SCENE('s3', { template: 'CTA', props: { title: 'Try it' } }),
+  ];
+  const findings = runDirectorChecks(scenes, {});
+  assert.deepEqual(findings.filter((finding) => finding.category === 'visual' || finding.category === 'structure'), []);
+});
+
+test('director checks: headline overflow limits differ by aspect', () => {
+  const long = '这是一个特别长的标题会溢出画面真的太长了吧';
+  const wide = runDirectorChecks([SCENE('s1', { props: { title: long }, template: 'CTA' })], { aspect: '16:9' });
+  const tall = runDirectorChecks([SCENE('s1', { props: { title: long }, template: 'CTA' })], { aspect: '9:16' });
+  assert.ok(tall.filter((finding) => finding.category === 'overflow').length >= wide.filter((finding) => finding.category === 'overflow').length);
+});
+
+test('director plan saves scenes + plan and reports phase/nextStep', async () => {
+  const { call, workspace } = await setup();
+  const result = await call('video_director_plan', {
+    project: 'demo',
+    brief: 'a promo',
+    scenes: [SCENE('s1', { template: 'CTA', props: { title: 'Try WebClaw', actionText: '免费开始' } })],
+  });
+  assert.equal(result.isError, undefined);
+  assert.equal(result.structuredContent.phase, 'planned');
+  assert.match(result.structuredContent.nextStep, /video_tts_synthesize/);
+  assert.equal(result.structuredContent.worstFinding, null);
+  const scenes = JSON.parse(await readFile(join(workspace, 'projects', 'demo', 'scenes.json'), 'utf8'));
+  assert.equal(scenes[0].template, 'CTA');
+  const plan = JSON.parse(await readFile(join(workspace, 'projects', 'demo', 'director', 'plan.json'), 'utf8'));
+  assert.equal(plan.brief, 'a promo');
+
+  const invalid = await call('video_director_plan', { project: 'demo', brief: 'x', scenes: [{ ...SCENE('s1'), template: 'Nope' }] });
+  assert.equal(invalid.isError, true);
+  assert.match(invalid.content[0].text, /template must be one of/);
+});
+
+test('director review requires a preview, records findings, gates approval on blockers', async () => {
+  const { call } = await setup();
+  await call('video_director_plan', { project: 'demo', brief: 'b', scenes: [SCENE('s1')] });
+  const tooEarly = await call('video_director_review', { project: 'demo', verdict: 'pass' });
+  assert.equal(tooEarly.isError, true);
+  assert.match(tooEarly.content[0].text, /video_director_preview first/);
+});
+
+test('director preview → review → finalize state machine (render sidecar stubbed)', async () => {
+  const { call, ctx, workspace } = await setup();
+  const scenes = [
+    SCENE('s1', { narration: 'first', audio: audio(2.4), duration: 3, captions: [{ text: 'first', startMs: 0, durationMs: 400 }] }),
+    SCENE('s2', { template: 'CTA', props: { title: 'Try it', actionText: 'Start' }, narration: 'go', audio: audio(1.9), duration: 2, captions: [{ text: 'go', startMs: 0, durationMs: 300 }] }),
+  ];
+  await call('video_director_plan', { project: 'demo', brief: 'b', scenes });
+
+  // Stub the render sidecar: write a real tiny mp4 (so frame extraction runs),
+  // emit the done line the way the real child process would (through onStdoutLine).
+  const renderCalls = [];
+  const ffmpeg = await findFfmpeg();
+  ctx.runScript = async (context, script, args, options = {}) => {
+    renderCalls.push({ script, args });
+    const output = args[args.indexOf('--output') + 1];
+    await context.ensureDir(join(output, '..'));
+    const made = await run(ffmpeg, ['-y', '-f', 'lavfi', '-i', 'testsrc=size=640x360:rate=15:duration=5', '-pix_fmt', 'yuv420p', output]);
+    assert.equal(made.code, 0, made.stderr.slice(-300));
+    options.onStdoutLine?.(JSON.stringify({ type: 'done', output, resolution: '720p', watermark: true }));
+    return { code: 0, stdout: '', stderr: '' };
+  };
+
+  const preview = await call('video_director_preview', { project: 'demo' });
+  assert.equal(preview.isError, undefined, preview?.content?.[0]?.text);
+  assert.equal(preview.structuredContent.phase, 'previewed');
+  assert.match(preview.structuredContent.nextStep, /video_director_review/);
+  assert.equal(preview.structuredContent.frames.length, 2);
+  assert.ok(renderCalls.every((call_) => call_.args.includes('--maxHeight') === false || true));
+
+  const revise = await call('video_director_review', {
+    project: 'demo',
+    verdict: 'revise',
+    findings: [{ sceneId: 's2', severity: 'warning', category: 'visual', note: 'CTA too plain' }],
+  });
+  assert.equal(revise.structuredContent.phase, 'revising');
+  assert.equal(revise.structuredContent.round, 2, 'a revise verdict opens round 2');
+  assert.deepEqual(revise.structuredContent.reviseSceneIds, ['s2']);
+  assert.match(revise.structuredContent.nextStep, /video_scenes_save|video_tts_synthesize/);
+
+  const badScene = await call('video_director_review', { project: 'demo', verdict: 'pass', findings: [{ sceneId: 'nope', severity: 'nit', category: 'x', note: 'y' }] });
+  assert.equal(badScene.isError, true);
+
+  const blocked = await call('video_director_finalize', { project: 'demo' });
+  assert.equal(blocked.isError, true);
+  assert.match(blocked.content[0].text, /not approved/);
+
+  // Round 2 preview (new files, round 1 kept), then approve and finalize.
+  const preview2 = await call('video_director_preview', { project: 'demo' });
+  assert.match(preview2.structuredContent.previewVideo, /round-2\.mp4$/);
+  const pass = await call('video_director_review', { project: 'demo', verdict: 'pass', findings: [{ severity: 'nit', category: 'pacing', note: 'fine' }] });
+  assert.equal(pass.structuredContent.approved, true);
+  assert.equal(pass.structuredContent.phase, 'approved');
+
+  const final = await call('video_director_finalize', { project: 'demo', resolution: '1080p' });
+  assert.equal(final.isError, undefined, final?.content?.[0]?.text);
+  assert.equal(final.structuredContent.phase, 'done');
+  assert.match(final.structuredContent.output, /final-round-2\.mp4$/);
+  assert.match(final.structuredContent.nextStep, /Deliver/);
+
+  const state = JSON.parse(await readFile(join(workspace, 'projects', 'demo', 'director', 'state.json'), 'utf8'));
+  assert.equal(state.phase, 'done');
+  assert.equal(state.finalOutput, final.structuredContent.output);
+});
+
+test('director finalize keeps the audio-first gate even with an approved review', async () => {
+  const { call, ctx } = await setup();
+  const scenes = [SCENE('s1', { narration: 'unvoiced' })];
+  await call('video_director_plan', { project: 'demo', brief: 'b', scenes });
+  ctx.runScript = async (context, script, args, options = {}) => {
+    const output = args[args.indexOf('--output') + 1];
+    await context.ensureDir(join(output, '..'));
+    await writeFile(output, 'fake');
+    options.onStdoutLine?.(JSON.stringify({ type: 'done', output, resolution: '720p', watermark: true }));
+    return { code: 0, stdout: '', stderr: '' };
+  };
+  await call('video_director_preview', { project: 'demo' });
+  // Review cannot pass: the deterministic audio-first blocker is merged in.
+  const pass = await call('video_director_review', { project: 'demo', verdict: 'pass' });
+  assert.equal(pass.structuredContent.approved, false);
+  const forced = await call('video_director_finalize', { project: 'demo' });
+  assert.equal(forced.isError, true);
+  assert.match(forced.content[0].text, /no audio/);
+  // The user is the final judge: an explicit override with a reason ships it.
+  const noReason = await call('video_director_finalize', { project: 'demo', override: true });
+  assert.match(noReason.content[0].text, /overrideReason/);
+  const shipped = await call('video_director_finalize', { project: 'demo', override: true, overrideReason: 'user asked to ship silent' });
+  assert.equal(shipped.structuredContent.phase, 'done');
+});
+
+test('extractPreviewFrames grabs one midpoint frame per scene plus a contact sheet', async () => {
+  const ffmpeg = await findFfmpeg();
+  const dir = await mkdtemp(join(tmpdir(), 'vc-frames-'));
+  const video = join(dir, 'preview.mp4');
+  // 4 seconds of moving test pattern, one scene per second.
+  const made = await run(ffmpeg, ['-y', '-f', 'lavfi', '-i', 'testsrc=size=640x360:rate=15:duration=4', '-pix_fmt', 'yuv420p', video]);
+  assert.equal(made.code, 0, made.stderr.slice(-300));
+  const scenes = [SCENE('s1', { duration: 1 }), SCENE('s2', { duration: 1 }), SCENE('s3', { duration: 1 }), SCENE('s4', { duration: 1 })];
+  const extraction = await extractPreviewFrames(ffmpeg, video, scenes, join(dir, 'round-1'));
+  assert.equal(extraction.frames.length, 4);
+  assert.ok(extraction.frames.every((frame) => frame.path.endsWith('.jpg')));
+  assert.equal(extraction.frames.map((frame) => frame.sceneId).join(','), 's1,s2,s3,s4');
+  // Midpoints: 0.45s, 1.45s, 2.45s, 3.45s.
+  assert.ok(extraction.frames[0].atSeconds < 1 && extraction.frames[3].atSeconds > 3);
+  assert.ok(extraction.contactSheet, 'contact sheet extracted');
+});

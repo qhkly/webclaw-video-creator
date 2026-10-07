@@ -1,6 +1,6 @@
 import type { SceneTemplate } from '../types';
 
-export const templates: SceneTemplate[] = ['TitleSlide', 'BulletPoints', 'BigStat', 'Quote', 'CodeExplainer', 'ImageFrame'];
+export const templates: SceneTemplate[] = ['TitleSlide', 'BulletPoints', 'BigStat', 'Quote', 'CodeExplainer', 'ImageFrame', 'CTA'];
 
 export const templateLabels: Record<SceneTemplate, string> = {
   TitleSlide: '标题封面',
@@ -9,6 +9,7 @@ export const templateLabels: Record<SceneTemplate, string> = {
   Quote: '引用金句',
   CodeExplainer: '代码展示',
   ImageFrame: '图文画面',
+  CTA: '品牌收尾',
 };
 
 interface Props {

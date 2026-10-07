@@ -36,6 +36,7 @@ const TEMPLATE_ICONS = {
   Quote,
   CodeExplainer: Code2,
   ImageFrame: Image,
+  CTA: Sparkles,
 };
 
 export default function SceneManager() {
@@ -427,6 +428,26 @@ export default function SceneManager() {
                 <label>
                   <span className="field-label">说明</span>
                   <input className="input" value={String(selectedScene.props.subtitle ?? '')} onChange={(event) => updateProp('subtitle', event.target.value)} />
+                </label>
+              </>
+            )}
+            {selectedScene.template === 'CTA' && (
+              <>
+                <label>
+                  <span className="field-label">标签</span>
+                  <input className="input" value={String(selectedScene.props.kicker ?? '')} onChange={(event) => updateProp('kicker', event.target.value)} />
+                </label>
+                <label>
+                  <span className="field-label">主标题</span>
+                  <input className="input" value={String(selectedScene.props.title ?? '')} onChange={(event) => updateProp('title', event.target.value)} />
+                </label>
+                <label>
+                  <span className="field-label">副标题</span>
+                  <input className="input" value={String(selectedScene.props.subtitle ?? '')} onChange={(event) => updateProp('subtitle', event.target.value)} />
+                </label>
+                <label>
+                  <span className="field-label">行动按钮</span>
+                  <input className="input" value={String(selectedScene.props.actionText ?? '')} onChange={(event) => updateProp('actionText', event.target.value)} />
                 </label>
               </>
             )}

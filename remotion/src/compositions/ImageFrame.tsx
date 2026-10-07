@@ -1,4 +1,4 @@
-import { AbsoluteFill, Img, interpolate } from 'remotion';
+import { AbsoluteFill, Img, interpolate, spring, useVideoConfig } from 'remotion';
 import { mediaSrc } from '../media';
 import { useScale } from '../useScale';
 
@@ -11,9 +11,16 @@ interface Props {
 }
 
 export default function ImageFrame({ imageSrc, caption, subtitle, fallbackTitle, frame }: Props) {
-  const opacity = interpolate(frame, [0, 24], [0, 1], { extrapolateRight: 'clamp' });
-  const src = mediaSrc(String(imageSrc || ''));
+  const { fps, durationInFrames } = useVideoConfig();
   const scale = useScale();
+  // Restrained motion per docs/remotion-best-practices.md: a smooth spring
+  // reveal (damping 200, no bounce) plus a slow Ken Burns drift on the image,
+  // never a static card and never a flashy effect.
+  const reveal = spring({ frame, fps, config: { damping: 200 } });
+  const opacity = interpolate(frame, [0, 24], [0, 1], { extrapolateRight: 'clamp' });
+  const zoom = interpolate(frame, [0, Math.max(1, durationInFrames)], [1.02, 1.1], { extrapolateRight: 'clamp' });
+  const drift = interpolate(frame, [0, Math.max(1, durationInFrames)], [-10, 10], { extrapolateRight: 'clamp' });
+  const src = mediaSrc(String(imageSrc || ''));
 
   return (
     <AbsoluteFill style={{ background: '#e7edf5', color: '#172033', padding: 96 * scale }}>
@@ -29,10 +36,20 @@ export default function ImageFrame({ imageSrc, caption, subtitle, fallbackTitle,
           placeItems: 'center',
           overflow: 'hidden',
           opacity,
+          transform: `translateY(${(1 - reveal) * 28 * scale}px)`,
+          boxShadow: '0 24px 60px rgba(15, 23, 42, 0.18)',
         }}
       >
         {src ? (
-          <Img src={src} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+          <Img
+            src={src}
+            style={{
+              width: '100%',
+              height: '100%',
+              objectFit: 'contain',
+              transform: `scale(${zoom}) translate3d(${drift}px, 0, 0)`,
+            }}
+          />
         ) : (
           <span style={{ color: '#64748b', fontSize: 42 * scale }}>Drop screenshot or diagram path into props</span>
         )}

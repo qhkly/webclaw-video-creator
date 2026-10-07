@@ -5,6 +5,7 @@ import { Background } from './Background';
 import { Captions } from './Captions';
 import BulletPoints from './compositions/BulletPoints';
 import BigStat from './compositions/BigStat';
+import CTA from './compositions/CTA';
 import CodeExplainer from './compositions/CodeExplainer';
 import ImageFrame from './compositions/ImageFrame';
 import Quote from './compositions/Quote';
@@ -57,6 +58,7 @@ function SceneRenderer({ scene }: { scene: VideoScene }) {
       {scene.template === 'Quote' && <Quote {...props} fallbackTitle={scene.title} frame={frame} />}
       {scene.template === 'ImageFrame' && <ImageFrame {...props} fallbackTitle={scene.title} frame={frame} />}
       {scene.template === 'TitleSlide' && <TitleSlide {...props} fallbackTitle={scene.title} frame={frame} />}
+      {scene.template === 'CTA' && <CTA {...props} fallbackTitle={scene.title} frame={frame} />}
     </AbsoluteFill>
   );
 }

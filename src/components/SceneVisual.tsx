@@ -71,6 +71,14 @@ export default function SceneVisual({ scene, compact = false }: Props) {
           <p>{stringProp(props.subtitle, scene.text)}</p>
         </div>
       )}
+      {scene.template === 'CTA' && (
+        <div className="visual-content title-visual">
+          <span>{stringProp(props.kicker, 'CTA')}</span>
+          <h1>{stringProp(props.title, scene.title)}</h1>
+          <p>{stringProp(props.subtitle, scene.text)}</p>
+          <span>{stringProp(props.actionText, '立即体验')}</span>
+        </div>
+      )}
     </div>
   );
 }

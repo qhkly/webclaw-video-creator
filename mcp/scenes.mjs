@@ -1,6 +1,6 @@
 // Validation for the scenes JSON consumed by scripts/render.mjs and the Remotion
 // composition. Mirrors `VideoScene` in src/types.ts — keep both in sync.
-export const SCENE_TEMPLATES = ['TitleSlide', 'BulletPoints', 'BigStat', 'Quote', 'CodeExplainer', 'ImageFrame'];
+export const SCENE_TEMPLATES = ['TitleSlide', 'BulletPoints', 'BigStat', 'Quote', 'CodeExplainer', 'ImageFrame', 'CTA'];
 
 export function validateScenes(scenes) {
   const errors = [];

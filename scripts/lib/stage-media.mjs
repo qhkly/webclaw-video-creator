@@ -47,6 +47,9 @@ export async function stageSceneMedia(scenes, publicDir) {
     if (scene.template === 'ImageFrame' && scene.props?.imageSrc) {
       next.props = { ...scene.props, imageSrc: await stage(scene.props.imageSrc) };
     }
+    if (scene.template === 'CTA' && scene.props?.logoSrc) {
+      next.props = { ...scene.props, logoSrc: await stage(scene.props.logoSrc) };
+    }
     result.push(next);
   }
   return result;

@@ -5,6 +5,7 @@ import { readdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { basename, join, resolve } from 'node:path';
 import { listBrandProfiles, loadBrandProfile } from './brand.mjs';
 import { exists, findFfmpeg, isProjectId, lastJsonLine, run, runScript, scriptError, ToolError } from './context.mjs';
+import { directorTools } from './director-tools.mjs';
 import { extensionFor, generateWithOpenAIOAuth, IMAGE_ASPECTS, normalizeImage } from './image-gen.mjs';
 import { limitArgs } from '../scripts/lib/plan.mjs';
 import { getProvider, listProviders, providerIds } from './providers.mjs';
@@ -104,7 +105,7 @@ export const tools = [
       `Scene: { id, title, text, narration, template: ${SCENE_TEMPLATES.join('|')}, duration (s), props: {...}, audio?, background?, captions? }. ` +
       'Returns validation errors instead of writing when invalid. Template props (all optional, bgColor/accent accepted): TitleSlide {title, subtitle}, ' +
       'BulletPoints {title, bullets: string[]}, BigStat {stat, label}, Quote {quote, author}, CodeExplainer {code, language, highlightLines: number[], caption}, ' +
-      'ImageFrame {imageSrc, caption, subtitle}. Scene title is the fallback heading.',
+      'ImageFrame {imageSrc, caption, subtitle}, CTA {kicker, title, subtitle, actionText, logoSrc}. Scene title is the fallback heading.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -419,6 +420,7 @@ export const tools = [
       return { output: target, keptOriginalAudio: keepOriginal, ...(await probeMedia(ffmpeg, target)) };
     },
   },
+  ...directorTools,
 ];
 
 /**

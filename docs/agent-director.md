@@ -51,8 +51,37 @@
 | `video_image_generate` | `openai-oauth-image`：本机 Codex OAuth 登录态 + `@openai-oauth/ai-sdk` 调 `gpt-image-2`，ffmpeg 统一裁成 1920x1080 / 1080x1920 / 1080x1080 PNG 写入 `assets/` | 付费（消耗账户额度），始终需审批 |
 | `video_render` | `scripts/render.mjs`（Remotion），支持 `notifications/progress` | 本地写，确定性 |
 | `video_audio_mux` | FFmpeg 混音（Tauri `combine_audio_video` 的改进版：保留原音轨和视频时长） | 本地写，确定性 |
+| `video_director_plan` | Director 工作流入口：保存分镜 + brief + 素材盘点，跑确定性检查 | 本地写，确定性 |
+| `video_director_preview` | 720p 预览渲染 + 逐场景中间帧 + 联络表（contact sheet） | 本地写，确定性 |
+| `video_director_review` | 记录评审结论（findings + verdict），合并确定性检查 | 本地写，确定性 |
+| `video_director_finalize` | 门禁通过后的正式渲染（audio-first + review 双门禁，可 override） | 本地写，确定性 |
 
 Agent 能看到的描述包括：`initialize.instructions`（导演工作方式）、每个工具的 `description` / `inputSchema` / `annotations`（readOnly、idempotent 等）。
+
+## Director 工作流（autoproduce）
+
+一键成片的"导演循环"不做成黑盒，而是拆成 4 个可组合的工具，审美判断始终在 Agent 手里，工具只负责持久化状态、跑确定性检查和驱动现有渲染/TTS sidecar：
+
+```
+brief ─▶ video_director_plan ─▶ video_tts_synthesize（逐场景，audio-first）
+                                    │
+              ┌─────────────────────▼──────────────────────┐
+              │ video_director_preview（720p + 抽帧 + 联络表） │
+              │ Agent 看帧，形成评审意见                        │
+              │ video_director_review（findings + verdict）    │
+              │   verdict=revise → 只改被点名的场景 → 再 preview │
+              │   verdict=pass   → approved                    │
+              └─────────────────────┬──────────────────────┘
+                                    ▼
+                        video_director_finalize（正式渲染）
+```
+
+- **阶段状态机**：`planned → previewed → revising → approved → done`，持久化在 `projects/<id>/director/state.json`；每轮 preview/review 的产物落在 `director/previews/round-N/`、`director/reviews/round-N.json`，revise 会开启下一轮而不是覆盖上一轮的评审材料。
+- **返回契约**：每个 director 工具都返回 `{ phase, artifacts, nextStep }`，失败时 `isError` 带明确的失败点，Agent 不需要记住流程。
+- **确定性检查**（`mcp/director.mjs` `runDirectorChecks`）：audio-first（有 narration 无 audio = blocker）、时长漂移 >1.6s、字幕覆盖、连续纯文字卡片 >2、标题溢出（按画幅区分阈值）、结尾 CTA 缺失提示。`video_director_review` 会把这些和 Agent 的 findings 合并，blocker 存在时 verdict=pass 也不会 approved。
+- **finalize 门禁**：audio-first + review approved 双门禁；`override: true` 需要理由并记录在状态里——用户是最终裁判。
+- **免费原则**：director 工具本身没有 `planFeature`（自有额度/本地计算能力对免费用户开放）；预览固定 720p，正式渲染仍走 `video_render` 的 plan 限制（免费 = 720p + 水印）。`video_image_generate` 保持原有的按次审批语义不变。
+- 视觉规范见 `docs/remotion-best-practices.md`（内嵌自 remotion-dev/skills 官方最佳实践）。
 
 ### 规划中的工具（按能力边界预留）
 

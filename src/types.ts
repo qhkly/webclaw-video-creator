@@ -1,6 +1,6 @@
 import type { Aspect, Resolution } from './constants/aspect';
 
-export type SceneTemplate = 'TitleSlide' | 'BulletPoints' | 'BigStat' | 'Quote' | 'CodeExplainer' | 'ImageFrame';
+export type SceneTemplate = 'TitleSlide' | 'BulletPoints' | 'BigStat' | 'Quote' | 'CodeExplainer' | 'ImageFrame' | 'CTA';
 
 export type VoiceEngine = 'edge' | 'f5';
 export type { Aspect, Format, Resolution } from './constants/aspect';
