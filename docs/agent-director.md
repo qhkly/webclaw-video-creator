@@ -52,11 +52,14 @@
 | `video_render` | `scripts/render.mjs`（Remotion），支持 `notifications/progress` | 本地写，确定性 |
 | `video_audio_mux` | FFmpeg 混音（Tauri `combine_audio_video` 的改进版：保留原音轨和视频时长） | 本地写，确定性 |
 | `video_director_plan` | Director 工作流入口：保存分镜 + brief + 素材盘点，跑确定性检查 | 本地写，确定性 |
-| `video_director_preview` | 720p 预览渲染 + 逐场景中间帧 + 联络表（contact sheet） | 本地写，确定性 |
+| `video_director_preview` | 720p 预览渲染 + 逐场景中间帧 + 联络表（contact sheet），并作为 image content 附给上层模型 | 本地写，确定性 |
+| `video_director_frames` | 按 round/sceneId 重读审片帧，作为 image content 返回（远程 Agent 真正"看到"） | 只读，确定性 |
 | `video_director_review` | 记录评审结论（findings + verdict），合并确定性检查 | 本地写，确定性 |
 | `video_director_finalize` | 门禁通过后的正式渲染（audio-first + review 双门禁，可 override） | 本地写，确定性 |
 
 Agent 能看到的描述包括：`initialize.instructions`（导演工作方式）、每个工具的 `description` / `inputSchema` / `annotations`（readOnly、idempotent 等）。
+
+**图像直传（通用协议能力）**：任何 tool handler 都可以在返回值里附带 `mcpImages: [{data, mimeType, title?}]`（base64），`protocol.mjs` 会把它转成 `tools/call` 结果里的 `{type:'image'}` content block（置于 text 之前），并从 `structuredContent`/text JSON 中剥离该键。单图上限约 1.1MB、单次调用总量约 4.5MB，超限的图会被丢弃并附说明——本地路径始终在 `structuredContent` 里作为兜底。这样通过 Secure Tunnel 调用的 ChatGPT/Claude 不需要读本机文件就能真正看到审片帧。
 
 ## Director 工作流（autoproduce）
 
@@ -77,6 +80,7 @@ brief ─▶ video_director_plan ─▶ video_tts_synthesize（逐场景，audio
 ```
 
 - **阶段状态机**：`planned → previewed → revising → approved → done`，持久化在 `projects/<id>/director/state.json`；每轮 preview/review 的产物落在 `director/previews/round-N/`、`director/reviews/round-N.json`，revise 会开启下一轮而不是覆盖上一轮的评审材料。
+- **审片帧直传**：preview 默认把 contact sheet（1024px 宽）+ 至多 4 张代表帧（640px，JPEG）作为 MCP image content 附在结果里（`images: false` 可关）；`video_director_frames` 可按 round/sceneId 重读任意帧，供修改后复查。上限控制见上文"图像直传"。
 - **返回契约**：每个 director 工具都返回 `{ phase, artifacts, nextStep }`，失败时 `isError` 带明确的失败点，Agent 不需要记住流程。
 - **确定性检查**（`mcp/director.mjs` `runDirectorChecks`）：audio-first（有 narration 无 audio = blocker）、时长漂移 >1.6s、字幕覆盖、连续纯文字卡片 >2、标题溢出（按画幅区分阈值）、结尾 CTA 缺失提示。`video_director_review` 会把这些和 Agent 的 findings 合并，blocker 存在时 verdict=pass 也不会 approved。
 - **finalize 门禁**：audio-first + review approved 双门禁；`override: true` 需要理由并记录在状态里——用户是最终裁判。

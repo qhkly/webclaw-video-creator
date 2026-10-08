@@ -202,3 +202,53 @@ test('extractPreviewFrames grabs one midpoint frame per scene plus a contact she
   assert.ok(extraction.frames[0].atSeconds < 1 && extraction.frames[3].atSeconds > 3);
   assert.ok(extraction.contactSheet, 'contact sheet extracted');
 });
+
+test('director preview attaches critique images; video_director_frames re-reads scenes as images', async () => {
+  const { call, ctx } = await setup();
+  assert.equal(tools.find((tool) => tool.name === 'video_director_frames').planFeature, undefined, 'free principle: no planFeature');
+  const scenes = [
+    SCENE('s1', { narration: 'one', audio: audio(1.4), duration: 2, captions: [{ text: 'one', startMs: 0, durationMs: 300 }] }),
+    SCENE('s2', { narration: 'two', audio: audio(1.4), duration: 2, captions: [{ text: 'two', startMs: 0, durationMs: 300 }] }),
+    SCENE('s3', { template: 'CTA', props: { title: 'Go', actionText: 'Start' }, narration: 'go', audio: audio(1.4), duration: 2, captions: [{ text: 'go', startMs: 0, durationMs: 300 }] }),
+  ];
+  await call('video_director_plan', { project: 'demo', brief: 'b', scenes });
+  const ffmpeg = await findFfmpeg();
+  ctx.runScript = async (context, script, args, options = {}) => {
+    const output = args[args.indexOf('--output') + 1];
+    await context.ensureDir(join(output, '..'));
+    await run(ffmpeg, ['-y', '-f', 'lavfi', '-i', 'testsrc=size=640x360:rate=15:duration=6', '-pix_fmt', 'yuv420p', output]);
+    options.onStdoutLine?.(JSON.stringify({ type: 'done', output, resolution: '720p', watermark: true }));
+    return { code: 0, stdout: '', stderr: '' };
+  };
+
+  const before = await call('video_director_frames', { project: 'demo' });
+  assert.equal(before.isError, true);
+  assert.match(before.content[0].text, /video_director_preview first/);
+
+  const preview = await call('video_director_preview', { project: 'demo' });
+  assert.equal(preview.isError, undefined, preview?.content?.[0]?.text);
+  const imageBlocks = preview.content.filter((block) => block.type === 'image');
+  // Contact sheet + up to PREVIEW_INLINE_FRAMES representative frames.
+  assert.equal(imageBlocks.length, 4);
+  assert.ok(imageBlocks.every((block) => block.mimeType === 'image/jpeg' && block.data.length > 1000));
+  assert.equal(preview.structuredContent.inlineImageCount, 4);
+  assert.equal('mcpImages' in preview.structuredContent, false, 'attachment key is stripped');
+
+  const bare = await call('video_director_preview', { project: 'demo', images: false });
+  assert.equal(bare.content.filter((block) => block.type === 'image').length, 0);
+  assert.equal(bare.structuredContent.inlineImageCount, 0);
+
+  const sheet = await call('video_director_frames', { project: 'demo' });
+  assert.equal(sheet.isError, undefined);
+  assert.equal(sheet.content.filter((block) => block.type === 'image').length, 1, 'default: contact sheet only');
+  assert.equal(sheet.structuredContent.round, 1);
+  assert.equal(sheet.structuredContent.frames.length, 3);
+
+  const one = await call('video_director_frames', { project: 'demo', sceneIds: ['s2'] });
+  assert.equal(one.content.filter((block) => block.type === 'image').length, 1);
+  assert.deepEqual(one.structuredContent.frames.map((frame) => frame.sceneId), ['s1', 's2', 's3']);
+
+  const missing = await call('video_director_frames', { project: 'demo', sceneIds: ['zz'] });
+  assert.equal(missing.isError, true);
+  assert.match(missing.content[0].text, /no frame in round 1/);
+});

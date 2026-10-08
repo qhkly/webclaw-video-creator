@@ -343,3 +343,46 @@ test('no shipped tool requires a WebClaw plan; only a tool declaring planFeature
   assert.equal((await call(async () => ({ ...PRO_PLAN, hostedTest: 'true' }))).isError, true, 'only boolean true counts');
   assert.deepEqual((await call(async () => ({ ...PRO_PLAN, hostedTest: true }))).structuredContent, { ok: true });
 });
+
+test('tools/call turns handler mcpImages into image content blocks (generic, any tool)', async () => {
+  const ctx = createContext({ workspace: await mkdtemp(join(tmpdir(), 'vc-mcp-img-')) });
+  const pixel = Buffer.from('not-really-a-jpeg').toString('base64');
+  const fake = [
+    { name: 'with_image', inputSchema: { type: 'object' }, handler: async () => ({ ok: true, mcpImages: [{ data: pixel, mimeType: 'image/jpeg', title: 'sheet' }] }) },
+    { name: 'plain', inputSchema: { type: 'object' }, handler: async () => ({ ok: true }) },
+    {
+      name: 'oversize',
+      inputSchema: { type: 'object' },
+      handler: async () => ({
+        ok: true,
+        mcpImages: [{ data: 'A'.repeat(1_600_000), mimeType: 'image/jpeg' }, { mimeType: 'image/jpeg' }], // too big + missing data
+      }),
+    },
+  ];
+  let id = 0;
+  const call = async (name) => {
+    const response = await createMcpServer({ tools: fake, ctx, readPlan: async () => PRO_PLAN })
+      .handle({ jsonrpc: '2.0', id: ++id, method: 'tools/call', params: { name, arguments: {} } });
+    return response.result;
+  };
+
+  const withImage = await call('with_image');
+  const image = withImage.content.find((block) => block.type === 'image');
+  assert.ok(image, 'an image content block is present');
+  assert.equal(image.data, pixel);
+  assert.equal(image.mimeType, 'image/jpeg');
+  assert.equal(withImage.content.filter((block) => block.type === 'text').length, 1, 'exactly one text block');
+  // The attachment key never leaks into structuredContent or the text JSON.
+  assert.deepEqual(withImage.structuredContent, { ok: true });
+  assert.deepEqual(JSON.parse(withImage.content.find((block) => block.type === 'text').text), { ok: true });
+
+  const plain = await call('plain');
+  assert.equal(plain.content.length, 1);
+  assert.equal(plain.content[0].type, 'text');
+  assert.deepEqual(plain.structuredContent, { ok: true });
+
+  const oversize = await call('oversize');
+  assert.equal(oversize.content.filter((block) => block.type === 'image').length, 0, 'oversized/malformed images are dropped, not fatal');
+  assert.ok(oversize.content.some((block) => block.type === 'text' && /omitted/.test(block.text)));
+  assert.deepEqual(oversize.structuredContent, { ok: true });
+});

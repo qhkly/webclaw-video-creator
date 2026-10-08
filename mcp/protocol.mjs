@@ -19,8 +19,8 @@ export const SERVER_INSTRUCTIONS = [
   'High-quality autoproduce flow (preferred over ad-hoc tool chains): brief -> write a scene-first storyboard',
   '(one beat per scene, last scene a CTA/brand closer) -> video_director_plan (saves scenes, runs checks,',
   'inventories existing assets to reuse) -> audio first: video_tts_synthesize per scene (durations follow the real audio)',
-  '-> video_director_preview (720p render + per-scene frames + contact sheet; READ those images and critique them)',
-  '-> video_director_review (record findings; revise flagged scenes only, not the whole film) -> repeat preview/review',
+  '-> video_director_preview (720p render + per-scene frames + contact sheet, attached as image content — actually look at them and critique what you see;',
+  'video_director_frames re-reads any round/scene as images) -> video_director_review (record findings; revise flagged scenes only, not the whole film) -> repeat preview/review',
   '-> video_director_finalize (gate-checked full-quality render). Every director tool returns { phase, artifacts, nextStep }.',
   'Visual baseline: avoid runs of plain text cards — mix images/screenshots/B-roll with restrained motion',
   '(Ken Burns, spring entrances); check overflow, contrast and caption occlusion on the extracted frames.',
@@ -133,10 +133,7 @@ export function createMcpServer({ tools, ctx, approval = null, log = () => {}, r
         await requestApproval(approval, tool, args);
       }
       const value = await tool.handler(args, { ctx, progress, log, plan });
-      return {
-        content: [{ type: 'text', text: JSON.stringify(value, null, 2) }],
-        structuredContent: value,
-      };
+      return toolResult(value);
     } catch (failure) {
       if (!(failure instanceof ToolError)) {
         log(`tool ${tool.name} crashed: ${failure.stack || failure.message}`);
@@ -146,6 +143,45 @@ export function createMcpServer({ tools, ctx, approval = null, log = () => {}, r
   }
 
   return { handle, tools };
+}
+
+/**
+ * Tools/call result shape. Any handler (not just the director's) may attach
+ * images for the calling model to actually see — useful when the client is a
+ * remote agent that cannot read local paths (ChatGPT via the Secure Tunnel):
+ * return `{ ...value, mcpImages: [{ data: base64, mimeType: 'image/jpeg', title? }] }`.
+ * The key is stripped from structuredContent/text JSON and becomes
+ * `{ type: 'image', data, mimeType }` content blocks ahead of the text block.
+ * Oversized images are dropped (never fail the call) with a note saying so.
+ */
+const IMAGE_MAX_BASE64 = 1_500_000; // ≈1.1 MB binary per image
+const IMAGE_TOTAL_BASE64 = 6_000_000; // ≈4.5 MB binary per call
+
+function toolResult(value) {
+  const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+  const { mcpImages, ...rest } = source;
+  const content = [{ type: 'text', text: JSON.stringify(rest, null, 2) }];
+  let dropped = 0;
+  let total = 0;
+  for (const image of Array.isArray(mcpImages) ? mcpImages : []) {
+    if (typeof image?.data !== 'string' || typeof image.mimeType !== 'string') {
+      dropped += 1;
+      continue;
+    }
+    if (image.data.length > IMAGE_MAX_BASE64 || total + image.data.length > IMAGE_TOTAL_BASE64) {
+      dropped += 1;
+      continue;
+    }
+    total += image.data.length;
+    content.unshift({ type: 'image', data: image.data, mimeType: image.mimeType });
+  }
+  if (dropped > 0) {
+    content.push({
+      type: 'text',
+      text: `${dropped} attached image(s) were omitted (malformed or over the size cap); the local paths are in structuredContent.`,
+    });
+  }
+  return { content, structuredContent: rest };
 }
 
 function describeTool(tool) {

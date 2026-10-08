@@ -6,8 +6,10 @@
 // Visual/motion conventions: docs/remotion-best-practices.md (vendored from
 // remotion-dev/skills).
 import { copyFile, mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { exists, run } from './context.mjs';
+import { exists, run, ToolError } from './context.mjs';
 import { validateScenes } from './scenes.mjs';
 
 export const DIRECTOR_PHASES = ['planned', 'previewed', 'revising', 'approved', 'done'];
@@ -228,6 +230,45 @@ export async function extractPreviewFrames(ffmpeg, video, scenes, outDir, { fram
   ]);
   const sheetPath = sheet.code === 0 && (await exists(contactSheet)) ? contactSheet : null;
   return { frames, contactSheet: sheetPath, intervalSeconds: Math.round(interval * 100) / 100 };
+}
+
+/**
+ * Read an image as MCP image content (base64 JPEG), downscaled so a handful of
+ * frames fit a remote agent's context. `run()` decodes stdout as text, so the
+ * re-encode goes through a temp file instead of a pipe.
+ */
+export async function jpegImageContent(ffmpeg, source, { width = 640, quality = 5 } = {}) {
+  const temp = join(tmpdir(), `vc-frame-${createHash('sha1').update(`${source}:${width}:${quality}`).digest('hex').slice(0, 16)}.jpg`);
+  const made = await run(ffmpeg, [
+    '-y', '-i', source,
+    '-vf', `scale='min(${width},iw)':-2`,
+    '-q:v', String(quality),
+    '-f', 'image2', temp,
+  ]);
+  if (made.code !== 0 || !(await exists(temp))) {
+    throw new ToolError(`failed to encode ${source} for transport: ${made.stderr.slice(-200)}`);
+  }
+  return { data: (await readFile(temp)).toString('base64'), mimeType: 'image/jpeg' };
+}
+
+/** Frames + contact sheet of a preview round, reconstructed from the round dir
+ * (file naming is ours: scene-NN-<sceneId>.jpg, contact-sheet.jpg). Works for
+ * historical rounds that state.lastPreview no longer describes. */
+export async function listRoundFrames(previewsDir, round) {
+  const dir = join(previewsDir, `round-${Math.max(1, round)}`);
+  if (!(await exists(dir))) {
+    return null;
+  }
+  const frames = [];
+  let contactSheet = null;
+  for (const name of (await readdir(dir)).sort()) {
+    if (name === 'contact-sheet.jpg') {
+      contactSheet = join(dir, name);
+    } else if (/^scene-\d+-/.test(name) && name.endsWith('.jpg')) {
+      frames.push({ sceneId: name.replace(/^scene-\d+-/, '').replace(/\.jpg$/, ''), path: join(dir, name) });
+    }
+  }
+  return { round, dir, frames, contactSheet };
 }
 
 /** Scenes plus the plan metadata the critique rounds refer back to. */

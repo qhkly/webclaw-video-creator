@@ -14,6 +14,8 @@ import {
   directorPaths,
   extractPreviewFrames,
   inventoryProjectAssets,
+  jpegImageContent,
+  listRoundFrames,
   readDirectorScenes,
   readState,
   runDirectorChecks,
@@ -28,13 +30,31 @@ const PROJECT_ARG = {
   description: 'Project id (folder under <workspace>/projects). Created on first write.',
 };
 const LOCAL_WRITE = { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false };
+const LOCAL_READ = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false };
+
+/** How many representative frames ride along with a preview (the whole sheet
+ * plus every single frame would bloat a remote agent's context). */
+const PREVIEW_INLINE_FRAMES = 4;
+
+/** mcpImages attachment shared by preview / frames tools; never fatal — the
+ * local paths are always in structuredContent as the fallback. */
+async function inlineReviewImages(ffmpeg, extraction, { frameLimit = PREVIEW_INLINE_FRAMES, frameWidth = 640 } = {}) {
+  const images = [];
+  if (extraction.contactSheet) {
+    images.push({ ...(await jpegImageContent(ffmpeg, extraction.contactSheet, { width: 1024 })), title: 'contact sheet' });
+  }
+  for (const frame of extraction.frames.slice(0, frameLimit)) {
+    images.push({ ...(await jpegImageContent(ffmpeg, frame.path, { width: frameWidth })), title: `scene ${frame.sceneId} @ ${frame.atSeconds ?? '?'}s` });
+  }
+  return images;
+}
 
 function nextStepFor(state) {
   switch (state.phase) {
     case 'planned':
       return 'Audio first: video_tts_synthesize each narration scene (sceneId), then video_director_preview.';
     case 'previewed':
-      return 'Look at contactSheet + per-scene frames (read the image files). Then video_director_review with your findings.';
+      return 'Look at the attached images (contact sheet + frames) — or video_director_frames for specific scenes. Then video_director_review with your findings.';
     case 'revising':
       return 'Fix the flagged scenes (video_scenes_save / video_tts_synthesize / video_image_generate — image generation keeps its per-call approval), then video_director_preview again.';
     case 'approved':
@@ -166,12 +186,13 @@ export const directorTools = [
       properties: {
         project: PROJECT_ARG,
         profile: { type: 'string', description: 'Brand profile supplying aspect/caption defaults, default "default".' },
+        images: { type: 'boolean', description: 'Attach the contact sheet + representative frames as MCP image content (default true) so you actually see them. Local paths are returned either way.' },
       },
       required: ['project'],
       additionalProperties: false,
     },
     annotations: { ...LOCAL_WRITE, idempotentHint: false },
-    async handler({ project, profile }, { ctx, progress, plan }) {
+    async handler({ project, profile, images = true }, { ctx, progress, log, plan }) {
       const { scenes, scenesPath } = await scenesOrThrow(ctx, project);
       const { profile: brand } = await loadBrandProfile(ctx, profile || 'default');
       const paths = directorPaths(ctx, project);
@@ -198,6 +219,17 @@ export const directorTools = [
         round,
         lastPreview: { video: preview, resolution: done.resolution, frames: extraction.frames, contactSheet: extraction.contactSheet },
       });
+      // Remote agents cannot read local paths; attach the critique material as
+      // image content (protocol.mjs turns mcpImages into image blocks).
+      let mcpImages = [];
+      if (images) {
+        progress?.(92, 'encoding review frames for transport');
+        try {
+          mcpImages = await inlineReviewImages(await findFfmpeg(), extraction);
+        } catch (error) {
+          log(`director preview could not inline images: ${error.message}`);
+        }
+      }
       return {
         phase: state.phase,
         round,
@@ -205,9 +237,77 @@ export const directorTools = [
         durationSeconds: scenes.reduce((sum, scene) => sum + scene.duration, 0),
         frames: extraction.frames,
         contactSheet: extraction.contactSheet,
+        inlineImageCount: mcpImages.length,
         findings: runDirectorChecks(scenes, { aspect: stateBefore?.aspect || brand.visual.aspect }),
+        mcpImages,
         artifacts: { preview: reviewDir, state: paths.state },
         nextStep: nextStepFor(state),
+      };
+    },
+  },
+  {
+    name: 'video_director_frames',
+    cost: 'local',
+    title: 'Director: read review frames as images',
+    description:
+      'Returns extracted preview frames as MCP image content (base64 JPEG) so a remote agent can actually see them — the contact sheet by default, or specific scenes via sceneIds (a preview renders all frames but only attaches a few). ' +
+      'Local file paths come back either way. Use between review rounds to re-examine a scene after fixing it.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        project: PROJECT_ARG,
+        round: { type: 'integer', description: 'Preview round to read; default: the latest round.' },
+        sceneIds: {
+          type: 'array',
+          description: 'Specific scenes to see (replaces the contact sheet). Default: none → contact sheet only.',
+          items: { type: 'string' },
+        },
+        maxWidth: { type: 'integer', description: 'Frame width in px, 256–1280, default 640.' },
+      },
+      required: ['project'],
+      additionalProperties: false,
+    },
+    annotations: LOCAL_READ,
+    async handler({ project, round, sceneIds = [], maxWidth = 640 }, { ctx }) {
+      const state = await readState(ctx, project);
+      if (!state || state.phase === 'planned') {
+        throw new ToolError('no preview frames yet: run video_director_preview first');
+      }
+      const targetRound = Math.max(1, round ?? state.round ?? 1);
+      const extraction = await listRoundFrames(directorPaths(ctx, project).previews, targetRound);
+      if (!extraction) {
+        throw new ToolError(`round ${targetRound} has no extracted frames; run video_director_preview first`);
+      }
+      const known = new Set(extraction.frames.map((frame) => frame.sceneId));
+      for (const sceneId of sceneIds) {
+        if (!known.has(sceneId)) {
+          throw new ToolError(`scene "${sceneId}" has no frame in round ${targetRound}; available: ${[...known].join(', ') || 'none'}`);
+        }
+      }
+      const width = Math.min(1280, Math.max(256, maxWidth));
+      const ffmpeg = await findFfmpeg();
+      const wanted = sceneIds.length
+        ? extraction.frames.filter((frame) => sceneIds.includes(frame.sceneId))
+        : [];
+      const mcpImages = [];
+      if (!sceneIds.length && extraction.contactSheet) {
+        mcpImages.push({ ...(await jpegImageContent(ffmpeg, extraction.contactSheet, { width: Math.max(1024, width) })), title: `round ${targetRound} contact sheet` });
+      }
+      for (const frame of wanted) {
+        mcpImages.push({ ...(await jpegImageContent(ffmpeg, frame.path, { width })), title: `round ${targetRound} scene ${frame.sceneId}` });
+      }
+      if (mcpImages.length === 0) {
+        throw new ToolError(`round ${targetRound} has no readable images (no contact sheet, no matching frames)`);
+      }
+      return {
+        phase: state.phase,
+        round: targetRound,
+        frames: extraction.frames,
+        contactSheet: extraction.contactSheet,
+        inlineImageCount: mcpImages.length,
+        mcpImages,
+        artifacts: { preview: extraction.dir },
+        nextStep: 'Critique what you see, then video_director_review with your findings.',
       };
     },
   },
