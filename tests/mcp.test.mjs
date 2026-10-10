@@ -347,8 +347,21 @@ test('no shipped tool requires a WebClaw plan; only a tool declaring planFeature
 test('tools/call turns handler mcpImages into image content blocks (generic, any tool)', async () => {
   const ctx = createContext({ workspace: await mkdtemp(join(tmpdir(), 'vc-mcp-img-')) });
   const pixel = Buffer.from('not-really-a-jpeg').toString('base64');
+  const second = Buffer.from('second').toString('base64');
+  const third = Buffer.from('third').toString('base64');
   const fake = [
-    { name: 'with_image', inputSchema: { type: 'object' }, handler: async () => ({ ok: true, mcpImages: [{ data: pixel, mimeType: 'image/jpeg', title: 'sheet' }] }) },
+    {
+      name: 'with_image',
+      inputSchema: { type: 'object' },
+      handler: async () => ({
+        ok: true,
+        mcpImages: [
+          { data: pixel, mimeType: 'image/jpeg', title: 'sheet' },
+          { data: second, mimeType: 'image/png', title: 'scene s1' },
+          { data: third, mimeType: 'image/jpeg' }, // untitled: no label block
+        ],
+      }),
+    },
     { name: 'plain', inputSchema: { type: 'object' }, handler: async () => ({ ok: true }) },
     {
       name: 'oversize',
@@ -367,14 +380,15 @@ test('tools/call turns handler mcpImages into image content blocks (generic, any
   };
 
   const withImage = await call('with_image');
-  const image = withImage.content.find((block) => block.type === 'image');
-  assert.ok(image, 'an image content block is present');
-  assert.equal(image.data, pixel);
-  assert.equal(image.mimeType, 'image/jpeg');
-  assert.equal(withImage.content.filter((block) => block.type === 'text').length, 1, 'exactly one text block');
+  // Handler order is kept and each titled image is preceded by its label;
+  // the JSON text block comes last.
+  assert.deepEqual(
+    withImage.content.map((block) => (block.type === 'image' ? `image:${block.mimeType}:${block.data}` : `text:${block.text.startsWith('{') ? 'json' : block.text}`)),
+    [`text:sheet`, `image:image/jpeg:${pixel}`, 'text:scene s1', `image:image/png:${second}`, `image:image/jpeg:${third}`, 'text:json'],
+  );
   // The attachment key never leaks into structuredContent or the text JSON.
   assert.deepEqual(withImage.structuredContent, { ok: true });
-  assert.deepEqual(JSON.parse(withImage.content.find((block) => block.type === 'text').text), { ok: true });
+  assert.deepEqual(JSON.parse(withImage.content.at(-1).text), { ok: true });
 
   const plain = await call('plain');
   assert.equal(plain.content.length, 1);

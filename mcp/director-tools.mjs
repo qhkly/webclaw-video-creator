@@ -5,6 +5,7 @@
 // existing render / TTS sidecars, so one agent task can chain the whole flow.
 // Every result reports { phase, artifacts, nextStep } (and the failure point on
 // isError), per the director contract in docs/agent-director.md.
+import { createHash } from 'node:crypto';
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { findFfmpeg, runScript, scriptError, ToolError } from './context.mjs';
@@ -66,6 +67,12 @@ function nextStepFor(state) {
   }
 }
 
+/** Fingerprint of the storyboard a preview/approval refers to: any later edit
+ * (video_scenes_save, video_tts_synthesize, hand edits) invalidates both. */
+function scenesFingerprint(scenes) {
+  return createHash('sha1').update(JSON.stringify(scenes)).digest('hex');
+}
+
 async function scenesOrThrow(ctx, project) {
   const scenesPath = join(ctx.projectDir(project), 'scenes.json');
   const scenes = await readDirectorScenes(scenesPath);
@@ -80,7 +87,7 @@ async function scenesOrThrow(ctx, project) {
 }
 
 /** Shared with video_render: spawn scripts/render.mjs and surface progress. */
-async function renderTo(ctx, { scenesPath, output, resolution, aspect, captions, plan, progress }) {
+async function renderTo(ctx, { scenesPath, output, resolution, format, aspect, captions, plan, progress }) {
   let done = null;
   const result = await (ctx.runScript ?? runScript)(
     ctx,
@@ -91,6 +98,7 @@ async function renderTo(ctx, { scenesPath, output, resolution, aspect, captions,
       '--output', output,
       '--aspect', aspect,
       '--resolution', resolution,
+      '--format', format || 'MP4',
       '--captions', JSON.stringify(captions),
       ...limitArgs(plan),
     ],
@@ -160,7 +168,13 @@ export const directorTools = [
         null,
         2,
       ));
-      const state = await writeState(ctx, project, { phase: 'planned', brief, aspect: ratio, round: 1, finalOutput: null });
+      // Re-planning must not overwrite the earlier cycle's previews/reviews:
+      // open the next round once the current one has produced any material.
+      const previous = await readState(ctx, project);
+      const round = previous
+        ? Math.max(1, previous.round || 1) + (previous.phase === 'planned' ? 0 : 1)
+        : 1;
+      const state = await writeState(ctx, project, { phase: 'planned', brief, aspect: ratio, round, finalOutput: null, approvedScenesHash: null });
       return {
         phase: state.phase,
         brief,
@@ -217,7 +231,8 @@ export const directorTools = [
       const state = await writeState(ctx, project, {
         phase: 'previewed',
         round,
-        lastPreview: { video: preview, resolution: done.resolution, frames: extraction.frames, contactSheet: extraction.contactSheet },
+        lastPreview: { video: preview, resolution: done.resolution, frames: extraction.frames, contactSheet: extraction.contactSheet, scenesHash: scenesFingerprint(scenes) },
+        approvedScenesHash: null,
       });
       // Remote agents cannot read local paths; attach the critique material as
       // image content (protocol.mjs turns mcpImages into image blocks).
@@ -363,6 +378,15 @@ export const directorTools = [
         }
       }
       const deterministic = runDirectorChecks(scenes, { aspect: stateBefore.aspect }).map((finding) => ({ ...finding, source: 'deterministic' }));
+      const hash = scenesFingerprint(scenes);
+      if (stateBefore.lastPreview?.scenesHash && stateBefore.lastPreview.scenesHash !== hash) {
+        deterministic.unshift({
+          severity: 'blocker',
+          category: 'structure',
+          note: 'scenes.json changed since the last preview; run video_director_preview again so the review covers what will render',
+          source: 'deterministic',
+        });
+      }
       const merged = [...findings.map((finding) => ({ ...finding, source: 'agent' })), ...deterministic];
       const blockers = merged.filter((finding) => finding.severity === 'blocker');
       const approved = verdict === 'pass' && blockers.length === 0;
@@ -376,7 +400,7 @@ export const directorTools = [
       // A revise verdict opens the next round: the following preview renders round N+1
       // instead of overwriting the material this critique refers to.
       const state = approved
-        ? await writeState(ctx, project, { phase: 'approved', round })
+        ? await writeState(ctx, project, { phase: 'approved', round, approvedScenesHash: hash })
         : await writeState(ctx, project, { phase: 'revising', round: round + 1 });
       const reviseSceneIds = [...new Set(merged.filter((finding) => finding.sceneId).map((finding) => finding.sceneId))];
       return {
@@ -428,6 +452,8 @@ export const directorTools = [
       }
       if (state.phase !== 'approved' && !override) {
         failures.push(`state phase is "${state.phase}", not approved — pass video_director_review (verdict=pass, no blockers) first`);
+      } else if (!override && state.approvedScenesHash && state.approvedScenesHash !== scenesFingerprint(scenes)) {
+        failures.push('scenes.json changed after approval — video_director_preview and video_director_review again');
       }
       if (override && !(overrideReason ?? '').trim()) {
         failures.push('override=true requires overrideReason');
@@ -442,6 +468,7 @@ export const directorTools = [
         scenesPath,
         output,
         resolution: resolution || '1080p',
+        format: format || 'MP4',
         aspect: state.aspect || brand.visual.aspect || '16:9',
         captions: brand.captions,
         plan,

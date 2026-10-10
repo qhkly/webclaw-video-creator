@@ -6,7 +6,7 @@ import { test } from 'node:test';
 import { createContext, findFfmpeg, run } from '../mcp/context.mjs';
 import { createMcpServer } from '../mcp/protocol.mjs';
 import { tools } from '../mcp/tools.mjs';
-import { extractPreviewFrames, runDirectorChecks } from '../mcp/director.mjs';
+import { extractPreviewFrames, readState, runDirectorChecks } from '../mcp/director.mjs';
 
 const PRO_PLAN = { maxExportHeight: 2160, watermark: false, commercialUse: true };
 
@@ -251,4 +251,74 @@ test('director preview attaches critique images; video_director_frames re-reads 
   const missing = await call('video_director_frames', { project: 'demo', sceneIds: ['zz'] });
   assert.equal(missing.isError, true);
   assert.match(missing.content[0].text, /no frame in round 1/);
+});
+
+test('director gates follow the storyboard: format, edits after approval, re-plan rounds, stale frames', async () => {
+  const { call, ctx, workspace } = await setup();
+  const voiced = (id, extra = {}) => SCENE(id, { narration: id, audio: audio(1.4), duration: 2, captions: [{ text: id, startMs: 0, durationMs: 300 }], ...extra });
+  const scenes = [voiced('s1'), voiced('s2', { template: 'CTA', props: { title: 'Go', actionText: 'Start' } })];
+  await call('video_director_plan', { project: 'demo', brief: 'b', scenes });
+  const ffmpeg = await findFfmpeg();
+  const renderCalls = [];
+  ctx.runScript = async (context, script, args, options = {}) => {
+    renderCalls.push(args);
+    const output = args[args.indexOf('--output') + 1];
+    await context.ensureDir(join(output, '..'));
+    await run(ffmpeg, ['-y', '-f', 'lavfi', '-i', 'testsrc=size=320x180:rate=10:duration=4', '-pix_fmt', 'yuv420p', join(output, '..', 'tmp.mp4')]);
+    await run(ffmpeg, ['-y', '-i', join(output, '..', 'tmp.mp4'), '-c', 'copy', '-f', 'mp4', output]);
+    options.onStdoutLine?.(JSON.stringify({ type: 'done', output, resolution: '720p', watermark: true }));
+    return { code: 0, stdout: '', stderr: '' };
+  };
+  const framesDir = (round) => join(workspace, 'projects', 'demo', 'director', 'previews', `round-${round}`);
+  const { readdir } = await import('node:fs/promises');
+
+  // Re-preview in the same round after renaming a scene: old frames are gone.
+  await call('video_director_preview', { project: 'demo', images: false });
+  assert.ok((await readdir(framesDir(1))).some((name) => name.includes('-s1.jpg')));
+  const renamed = [voiced('intro'), scenes[1]];
+  await call('video_scenes_save', { project: 'demo', scenes: renamed });
+
+  // A review of a preview that no longer matches scenes.json cannot approve.
+  const stale = await call('video_director_review', { project: 'demo', verdict: 'pass' });
+  assert.equal(stale.structuredContent.approved, false);
+  assert.ok(stale.structuredContent.blockers.some((finding) => /changed since the last preview/.test(finding.note)));
+
+  await call('video_director_preview', { project: 'demo', images: false }); // round 2 after the revise
+  const round2 = await readdir(framesDir(2));
+  assert.ok(round2.some((name) => name.includes('-intro.jpg')));
+  assert.ok(!round2.some((name) => name.includes('-s1.jpg')), 'no stale frames for removed scenes');
+  // Rename inside the same round and re-preview: round-2/ must not keep -intro frames.
+  await call('video_scenes_save', { project: 'demo', scenes: [voiced('opening'), scenes[1]] });
+  await call('video_director_preview', { project: 'demo', images: false });
+  const reshot = await readdir(framesDir(2));
+  assert.ok(reshot.some((name) => name.includes('-opening.jpg')));
+  assert.ok(!reshot.some((name) => name.includes('-intro.jpg')), 'same-round re-preview drops stale frames');
+  await call('video_scenes_save', { project: 'demo', scenes: renamed });
+  await call('video_director_preview', { project: 'demo', images: false });
+
+  const pass = await call('video_director_review', { project: 'demo', verdict: 'pass' });
+  assert.equal(pass.structuredContent.approved, true);
+
+  // Editing after approval re-closes the gate.
+  await call('video_scenes_save', { project: 'demo', scenes: [voiced('intro', { duration: 2.2 }), scenes[1]] });
+  const edited = await call('video_director_finalize', { project: 'demo' });
+  assert.equal(edited.isError, true);
+  assert.match(edited.content[0].text, /changed after approval/);
+  await call('video_scenes_save', { project: 'demo', scenes: renamed }); // back to the approved storyboard
+
+  // The requested container reaches render.mjs.
+  const final = await call('video_director_finalize', { project: 'demo', format: 'WebM' });
+  assert.equal(final.isError, undefined, final?.content?.[0]?.text);
+  assert.match(final.structuredContent.output, /final-round-2\.webm$/);
+  const finalArgs = renderCalls.at(-1);
+  assert.equal(finalArgs[finalArgs.indexOf('--format') + 1], 'WebM');
+  assert.equal(renderCalls[0][renderCalls[0].indexOf('--format') + 1], 'MP4', 'previews stay MP4');
+
+  // Re-planning a finished project opens round 3 instead of overwriting round 1/2.
+  const replan = await call('video_director_plan', { project: 'demo', brief: 'v2', scenes: renamed });
+  assert.equal((await readState(ctx, 'demo')).round, 3);
+  assert.equal(replan.structuredContent.phase, 'planned');
+  const preview3 = await call('video_director_preview', { project: 'demo', images: false });
+  assert.match(preview3.structuredContent.previewVideo, /round-3\.mp4$/);
+  assert.ok((await readdir(framesDir(1))).some((name) => name.includes('-s1.jpg')), 'round 1 material kept');
 });

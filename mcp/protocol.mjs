@@ -150,8 +150,9 @@ export function createMcpServer({ tools, ctx, approval = null, log = () => {}, r
  * images for the calling model to actually see — useful when the client is a
  * remote agent that cannot read local paths (ChatGPT via the Secure Tunnel):
  * return `{ ...value, mcpImages: [{ data: base64, mimeType: 'image/jpeg', title? }] }`.
- * The key is stripped from structuredContent/text JSON and becomes
- * `{ type: 'image', data, mimeType }` content blocks ahead of the text block.
+ * The key is stripped from structuredContent/text JSON and becomes, in order,
+ * `{ type: 'image', data, mimeType }` blocks (each preceded by a text block
+ * with its title, when given) ahead of the JSON text block.
  * Oversized images are dropped (never fail the call) with a note saying so.
  */
 const IMAGE_MAX_BASE64 = 1_500_000; // ≈1.1 MB binary per image
@@ -160,7 +161,7 @@ const IMAGE_TOTAL_BASE64 = 6_000_000; // ≈4.5 MB binary per call
 function toolResult(value) {
   const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
   const { mcpImages, ...rest } = source;
-  const content = [{ type: 'text', text: JSON.stringify(rest, null, 2) }];
+  const attached = [];
   let dropped = 0;
   let total = 0;
   for (const image of Array.isArray(mcpImages) ? mcpImages : []) {
@@ -173,8 +174,14 @@ function toolResult(value) {
       continue;
     }
     total += image.data.length;
-    content.unshift({ type: 'image', data: image.data, mimeType: image.mimeType });
+    // Keep the handler's order and label each image, so the model can tell the
+    // contact sheet from scene frames and pin findings on the right scene.
+    if (typeof image.title === 'string' && image.title) {
+      attached.push({ type: 'text', text: image.title });
+    }
+    attached.push({ type: 'image', data: image.data, mimeType: image.mimeType });
   }
+  const content = [...attached, { type: 'text', text: JSON.stringify(rest, null, 2) }];
   if (dropped > 0) {
     content.push({
       type: 'text',

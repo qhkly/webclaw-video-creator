@@ -35,7 +35,8 @@ export default function CTA({ kicker, title, subtitle, actionText, logoSrc, bgCo
       style={{
         alignItems: 'center',
         justifyContent: 'center',
-        background: `radial-gradient(circle at 50% 36%, ${accentColor}2e 0%, transparent 58%), ${String(bgColor || '#0b1026')}`,
+        // color-mix (not `${accent}2e`) so any CSS colour works: #f00, 'red', rgb(...).
+        background: `radial-gradient(circle at 50% 36%, color-mix(in srgb, ${accentColor} 18%, transparent) 0%, transparent 58%), ${String(bgColor || '#0b1026')}`,
         color: '#f8fafc',
       }}
     >

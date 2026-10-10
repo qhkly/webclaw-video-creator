@@ -5,7 +5,7 @@
 // state machine, quality lint and FFmpeg frame extraction reproducible.
 // Visual/motion conventions: docs/remotion-best-practices.md (vendored from
 // remotion-dev/skills).
-import { copyFile, mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -202,6 +202,9 @@ export async function writeState(ctx, projectId, patch) {
  * evenly spread frames. The directing agent looks at these images to critique.
  */
 export async function extractPreviewFrames(ffmpeg, video, scenes, outDir, { frameWidth = 480, sheetColumns = 4, sheetMaxFrames = 16 } = {}) {
+  // outDir is this round's frame folder: drop frames of a previous extraction
+  // (renamed/removed scenes) so readers never mistake them for current ones.
+  await rm(outDir, { recursive: true, force: true });
   await mkdir(outDir, { recursive: true });
   const frames = [];
   let offset = 0;
