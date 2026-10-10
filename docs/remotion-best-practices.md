@@ -2,7 +2,8 @@
 
 本文件是给 AI 导演（Claude Code / Codex / ChatGPT 等 directing agent）和人类贡献者的
 **项目内固定版本**参考资料，摘编自 Remotion 官方为 coding agent 发布的
-Agent Skills 仓库。
+Agent Skills 仓库。制片层面的行业基线（时长、语速、字幕安全区、响度）见
+[`production-playbook.md`](production-playbook.md)。
 
 - **来源**：<https://github.com/remotion-dev/skills>（`skills/remotion/SKILL.md` + `rules/*.md`）
 - **Vendor 版本**：master@2026-10-08（快照时仓库无版本 tag；以 README/rules 目录结构为准）

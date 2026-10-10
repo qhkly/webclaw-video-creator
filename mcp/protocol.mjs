@@ -24,7 +24,9 @@ export const SERVER_INSTRUCTIONS = [
   '-> video_director_finalize (gate-checked full-quality render). Every director tool returns { phase, artifacts, nextStep }.',
   'Visual baseline: avoid runs of plain text cards — mix images/screenshots/B-roll with restrained motion',
   '(Ken Burns, spring entrances); check overflow, contrast and caption occlusion on the extracted frames.',
-  'Conventions and Remotion know-how: docs/remotion-best-practices.md in the app repository.',
+  'Production baseline (checked automatically where measurable): hook within 3-5s, narration ~180-260 Chinese chars/min or ~150 wpm,',
+  '60-90s explainers / <=60s vertical, one beat per scene, 9:16 platform UI safe zones, -14..-16 LUFS with true peak <= -1 dBTP:',
+  'docs/production-playbook.md. Remotion know-how: docs/remotion-best-practices.md (both in the app repository).',
   'For visuals, video_image_generate (uses the user\'s ChatGPT image quota, needs approval) writes a PNG to the project assets and can attach it to a scene.',
   'Relative paths resolve inside the workspace; outputs are always written inside the workspace.',
 ].join(' ');

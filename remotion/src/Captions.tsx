@@ -10,7 +10,7 @@ interface Props {
 
 export function Captions({ scenes, settings }: Props) {
   const frame = useCurrentFrame();
-  const { fps } = useVideoConfig();
+  const { fps, width, height } = useVideoConfig();
   const scale = useScale();
   const currentMs = (frame / fps) * 1000;
   const captions = settings ?? {
@@ -34,6 +34,11 @@ export function Captions({ scenes, settings }: Props) {
   const pop = interpolate(progress, [0, 140], [0.96, 1], { extrapolateRight: 'clamp' });
   const isMiddle = captions.position === 'middle';
   const positionTransform = isMiddle ? 'translateY(-50%) ' : '';
+  // Vertical shorts: TikTok/Reels/Shorts draw their caption, buttons and nav over
+  // the bottom ~17-25% and the right ~13% (docs/production-playbook.md §3), so
+  // bottom captions sit above that band and stay clear of the action rail.
+  const vertical = height > width;
+  const bottomOffset = vertical ? Math.round(height * 0.25) : 92 * scale;
 
   return (
     <AbsoluteFill style={{ alignItems: 'center', pointerEvents: 'none' }}>
@@ -41,8 +46,8 @@ export function Captions({ scenes, settings }: Props) {
         style={{
           position: 'absolute',
           top: isMiddle ? '50%' : undefined,
-          bottom: isMiddle ? undefined : 92 * scale,
-          maxWidth: '82%',
+          bottom: isMiddle ? undefined : bottomOffset,
+          maxWidth: vertical ? '74%' : '82%',
           padding: `${14 * scale}px ${30 * scale}px`,
           borderRadius: 18 * scale,
           background: 'rgba(2, 6, 23, 0.62)',

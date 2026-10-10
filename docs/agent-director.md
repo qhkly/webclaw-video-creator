@@ -82,7 +82,7 @@ brief ─▶ video_director_plan ─▶ video_tts_synthesize（逐场景，audio
 - **阶段状态机**：`planned → previewed → revising → approved → done`，持久化在 `projects/<id>/director/state.json`；每轮 preview/review 的产物落在 `director/previews/round-N/`、`director/reviews/round-N.json`，revise 会开启下一轮而不是覆盖上一轮的评审材料。
 - **审片帧直传**：preview 默认把 contact sheet（1024px 宽）+ 至多 4 张代表帧（640px，JPEG）作为 MCP image content 附在结果里（`images: false` 可关）；`video_director_frames` 可按 round/sceneId 重读任意帧，供修改后复查。上限控制见上文"图像直传"。
 - **返回契约**：每个 director 工具都返回 `{ phase, artifacts, nextStep }`，失败时 `isError` 带明确的失败点，Agent 不需要记住流程。
-- **确定性检查**（`mcp/director.mjs` `runDirectorChecks`）：audio-first（有 narration 无 audio = blocker）、时长漂移 >1.6s、字幕覆盖、连续纯文字卡片 >2、标题溢出（按画幅区分阈值）、结尾 CTA 缺失提示。`video_director_review` 会把这些和 Agent 的 findings 合并，blocker 存在时 verdict=pass 也不会 approved。
+- **确定性检查**（`mcp/director.mjs` `runDirectorChecks`）：audio-first（有 narration 无 audio = blocker）、时长漂移 >1.6s、字幕覆盖、连续纯文字卡片 >2、标题溢出（按画幅区分阈值）、结尾 CTA 缺失提示，以及按 [`docs/production-playbook.md`](production-playbook.md) 落地的制片基线：旁白语速、开场钩子 ≤5s、单镜头 >10s、总时长；preview/finalize 还会测成片响度（EBU R128，目标 -14…-16 LUFS、真峰值 ≤ -1 dBTP）。`video_director_review` 会把这些和 Agent 的 findings 合并，blocker 存在时 verdict=pass 也不会 approved。
 - **finalize 门禁**：audio-first + review approved 双门禁；`override: true` 需要理由并记录在状态里——用户是最终裁判。
 - **免费原则**：director 工具本身没有 `planFeature`（自有额度/本地计算能力对免费用户开放）；预览固定 720p，正式渲染仍走 `video_render` 的 plan 限制（免费 = 720p + 水印）。`video_image_generate` 保持原有的按次审批语义不变。
 - 视觉规范见 `docs/remotion-best-practices.md`（内嵌自 remotion-dev/skills 官方最佳实践）。

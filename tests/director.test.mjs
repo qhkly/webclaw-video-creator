@@ -6,7 +6,7 @@ import { test } from 'node:test';
 import { createContext, findFfmpeg, run } from '../mcp/context.mjs';
 import { createMcpServer } from '../mcp/protocol.mjs';
 import { tools } from '../mcp/tools.mjs';
-import { extractPreviewFrames, readState, runDirectorChecks } from '../mcp/director.mjs';
+import { extractPreviewFrames, loudnessFindings, measureLoudness, readState, runDirectorChecks, speechRate } from '../mcp/director.mjs';
 
 const PRO_PLAN = { maxExportHeight: 2160, watermark: false, commercialUse: true };
 
@@ -321,4 +321,54 @@ test('director gates follow the storyboard: format, edits after approval, re-pla
   const preview3 = await call('video_director_preview', { project: 'demo', images: false });
   assert.match(preview3.structuredContent.previewVideo, /round-3\.mp4$/);
   assert.ok((await readdir(framesDir(1))).some((name) => name.includes('-s1.jpg')), 'round 1 material kept');
+});
+
+test('production playbook checks: pace, hook, long shots, runtime', () => {
+  // Calibrated on real Edge TTS output (224–276 字/分 at +0%): only clearly fast lines flag.
+  assert.deepEqual(speechRate('外语视频，看得懂才能看下去', 3), { unit: 'chars', units: 12, perMinute: 240 });
+  assert.equal(speechRate('AI配音', 1).units, 3, 'Latin runs inside Chinese count as words');
+  assert.equal(speechRate('Ship videos faster with your own agent', 3).unit, 'words');
+  assert.equal(speechRate('', 3), null);
+
+  const pace = (narration, duration) => runDirectorChecks([SCENE('s1', { narration, audio: audio(duration), duration, captions: [{ text: 'x', startMs: 0, durationMs: 1 }], template: 'CTA', props: { title: 'x' } })], {})
+    .filter((finding) => finding.category === 'pacing');
+  assert.deepEqual(pace('外语视频，看得懂才能看下去', 3), [], '240 字/分 is comfortable');
+  assert.equal(pace('一二三四五六七八九十一二三四', 3)[0].severity, 'nit', '280 字/分 is a nit');
+  assert.equal(pace('一二三四五六七八九十一二三四五六七', 3)[0].severity, 'warning', '340 字/分 is a warning');
+  assert.equal(pace('one two three four five six seven eight nine ten eleven', 3)[0].severity, 'warning', '220 wpm');
+
+  const opening = runDirectorChecks([SCENE('s1', { duration: 7, template: 'CTA', props: { title: 'x' } })], {});
+  assert.ok(opening.some((finding) => /hook/.test(finding.note)));
+  const longShot = runDirectorChecks([SCENE('s1', { duration: 3 }), SCENE('s2', { duration: 12, template: 'CTA', props: { title: 'x' } })], {});
+  assert.ok(longShot.some((finding) => finding.sceneId === 's2' && /one shot/.test(finding.note)));
+  const videoBg = runDirectorChecks([SCENE('s1', { duration: 3 }), SCENE('s2', { duration: 12, background: { kind: 'video', assetPath: '/tmp/v.mp4' }, template: 'CTA', props: { title: 'x' } })], {});
+  assert.ok(!videoBg.some((finding) => /one shot/.test(finding.note)), 'moving footage is not a static shot');
+
+  const many = Array.from({ length: 8 }, (_, index) => SCENE(`s${index}`, { duration: 9, background: { kind: 'image', assetPath: '/tmp/b.png' } }));
+  assert.ok(runDirectorChecks(many, { aspect: '9:16' }).some((finding) => /runtime 72s exceeds ~60s/.test(finding.note)));
+  assert.ok(!runDirectorChecks(many, { aspect: '16:9' }).some((finding) => /runtime/.test(finding.note)));
+});
+
+test('measureLoudness reads EBU R128 integrated loudness and true peak', async () => {
+  const ffmpeg = await findFfmpeg();
+  const dir = await mkdtemp(join(tmpdir(), 'vc-loud-'));
+  const make = async (name, volume) => {
+    const file = join(dir, name);
+    const made = await run(ffmpeg, ['-y', '-f', 'lavfi', '-i', 'sine=frequency=440:duration=4', '-af', `volume=${volume}dB`, '-c:a', 'aac', file]);
+    assert.equal(made.code, 0, made.stderr.slice(-300));
+    return file;
+  };
+  const quiet = await measureLoudness(ffmpeg, await make('quiet.m4a', -20));
+  assert.ok(quiet.integratedLufs < -19, `quiet ${quiet.integratedLufs}`);
+  assert.ok(loudnessFindings(quiet).some((finding) => /too quiet/.test(finding.note)));
+  const hot = await measureLoudness(ffmpeg, await make('hot.m4a', 17));
+  assert.ok(hot.integratedLufs > -13, `hot ${hot.integratedLufs}`);
+  assert.ok(loudnessFindings(hot).some((finding) => /turn it down/.test(finding.note)));
+  assert.ok(loudnessFindings(hot).some((finding) => /true peak/.test(finding.note)));
+  assert.deepEqual(loudnessFindings({ integratedLufs: -15.2, truePeakDbfs: -2 }), []);
+  assert.deepEqual(loudnessFindings(null), []);
+
+  const silent = join(dir, 'video-only.mp4');
+  await run(ffmpeg, ['-y', '-f', 'lavfi', '-i', 'testsrc=size=160x90:rate=5:duration=1', '-pix_fmt', 'yuv420p', silent]);
+  assert.equal(await measureLoudness(ffmpeg, silent), null, 'no audio stream → null');
 });

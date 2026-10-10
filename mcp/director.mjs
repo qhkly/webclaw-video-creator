@@ -107,7 +107,103 @@ export function runDirectorChecks(scenes, { maxTextRun = 2, aspect } = {}) {
     push('nit', 'structure', `last scene ${last.id} is ${last.template}; a CTA/brand closer (template CTA) ends promos better`, last.id);
   }
 
+  // 7) Narration pace (docs/production-playbook.md §2): measured against the
+  //    real audio when present, else against the planned scene length — so an
+  //    over-long line is caught before TTS too.
+  for (const scene of scenes) {
+    const seconds = scene.audio?.duration || scene.duration;
+    const rate = speechRate(scene.narration, seconds);
+    if (!rate) {
+      continue;
+    }
+    const [nitAbove, warnAbove] = rate.unit === 'chars' ? [260, 300] : [170, 200];
+    if (rate.perMinute > nitAbove) {
+      push(
+        rate.perMinute > warnAbove ? 'warning' : 'nit',
+        'pacing',
+        `scene ${scene.id} narration runs ${rate.perMinute} ${rate.unit}/min (comfortable: ${rate.unit === 'chars' ? '180–260 字/分' : '140–170 wpm'}); trim the line or give the scene more time`,
+        scene.id,
+      );
+    }
+  }
+
+  // 8) Hook: the first 3–5 seconds decide whether anyone keeps watching.
+  const first = scenes[0];
+  if (first && first.duration > 5) {
+    push('warning', 'structure', `opening scene ${first.id} is ${first.duration}s; land the hook (problem, result or contrast — not a logo) within 3–5s, then cut`, first.id);
+  }
+
+  // 9) One beat per scene: a single static shot past ~10s reads as dead air.
+  for (const scene of scenes) {
+    if (scene.duration > 10 && scene.background?.kind !== 'video') {
+      push('nit', 'pacing', `scene ${scene.id} holds one shot for ${scene.duration}s; split it into two beats or add B-roll/motion`, scene.id);
+    }
+  }
+
+  // 10) Runtime: explainers retain best at 60–90s, vertical shorts under ~60s.
+  const runtime = scenes.reduce((sum, scene) => sum + scene.duration, 0);
+  const runtimeLimit = aspect === '9:16' ? 60 : 90;
+  if (runtime > runtimeLimit) {
+    push('nit', 'structure', `total runtime ${Math.round(runtime)}s exceeds ~${runtimeLimit}s for ${aspect || '16:9'}; retention drops after that — cut the weakest beat`);
+  }
+
   findings.sort((a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity]);
+  return findings;
+}
+
+/**
+ * Spoken units per minute for a narration line. Chinese is counted in Han
+ * characters (Latin words count as one unit each), other text in words.
+ * Returns null when there is nothing to measure.
+ */
+export function speechRate(narration, seconds) {
+  const text = String(narration ?? '').trim();
+  if (!text || !(seconds > 0)) {
+    return null;
+  }
+  const han = (text.match(/\p{Script=Han}/gu) ?? []).length;
+  // Non-Han runs only, so "AI配音" counts "AI" as a word plus two characters.
+  const words = (text.match(/[^\s\p{P}\p{S}\p{Script=Han}]+/gu) ?? []).length;
+  const zh = han >= words;
+  const units = zh ? han + words : words;
+  return { unit: zh ? 'chars' : 'words', units, perMinute: Math.round((units / seconds) * 60) };
+}
+
+/**
+ * Loudness of a rendered file via FFmpeg's EBU R128 meter (integrated LUFS +
+ * true peak). Null when the file has no audio or the meter fails.
+ */
+export async function measureLoudness(ffmpeg, file) {
+  const result = await run(ffmpeg, ['-hide_banner', '-nostats', '-i', file, '-map', '0:a:0?', '-af', 'ebur128=peak=true', '-f', 'null', '-']);
+  const summary = result.stderr.slice(result.stderr.lastIndexOf('Summary:'));
+  const integrated = summary.match(/I:\s+(-?[\d.]+|-inf)\s+LUFS/);
+  const peak = summary.match(/True peak:\s+Peak:\s+(-?[\d.]+|-inf)\s+dBFS/);
+  if (result.code !== 0 || !integrated || integrated[1] === '-inf') {
+    return null;
+  }
+  return {
+    integratedLufs: Number(integrated[1]),
+    truePeakDbfs: peak && peak[1] !== '-inf' ? Number(peak[1]) : null,
+  };
+}
+
+/** Delivery targets (docs/production-playbook.md §4): speech-led mixes at
+ * -14…-16 LUFS integrated, true peak ≤ -1 dBTP. Platforms turn loud masters
+ * down but do not turn quiet ones up. */
+export function loudnessFindings(loudness) {
+  if (!loudness) {
+    return [];
+  }
+  const findings = [];
+  const { integratedLufs: lufs, truePeakDbfs: peak } = loudness;
+  if (lufs > -13) {
+    findings.push({ severity: 'warning', category: 'audio', note: `mix is ${lufs} LUFS integrated; platforms will turn it down and it may clip — target -14…-16 LUFS` });
+  } else if (lufs < -19) {
+    findings.push({ severity: 'warning', category: 'audio', note: `mix is ${lufs} LUFS integrated; too quiet (YouTube/TikTok do not turn it up) — target -14…-16 LUFS` });
+  }
+  if (peak !== null && peak > -1) {
+    findings.push({ severity: 'warning', category: 'audio', note: `true peak ${peak} dBFS exceeds -1 dBTP; lower music or limit the mix` });
+  }
   return findings;
 }
 

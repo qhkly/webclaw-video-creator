@@ -17,6 +17,8 @@ import {
   inventoryProjectAssets,
   jpegImageContent,
   listRoundFrames,
+  loudnessFindings,
+  measureLoudness,
   readDirectorScenes,
   readState,
   runDirectorChecks,
@@ -131,7 +133,7 @@ export const directorTools = [
     description:
       'Start of the Director workflow. Saves the storyboard (same scenes shape as video_scenes_save; write it yourself from the brief — scene-first, one beat per scene, last scene a CTA/brand closer) ' +
       'plus the brief and an asset inventory of what already exists in the project/workspace (asset-first: reuse before generating). ' +
-      'Runs deterministic checks (audio-first violations, caption coverage, text-only runs, headline overflow) and returns them as findings with severities. ' +
+      'Runs deterministic checks (audio-first violations, caption coverage, text-only runs, headline overflow, narration pace, hook length, long static shots, runtime) and returns them as findings with severities. ' +
       'Phases: planned → previewed → revising → approved → done; every director tool returns { phase, artifacts, nextStep }. ' +
       'Conventions: docs/remotion-best-practices.md.',
     inputSchema: {
@@ -193,7 +195,7 @@ export const directorTools = [
     cost: 'local',
     title: 'Director: low-cost preview render',
     description:
-      'Renders the current scenes.json at preview quality (720p) with the existing Remotion pipeline, then extracts per-scene representative frames (scene midpoints) and a contact sheet for visual critique. ' +
+      'Renders the current scenes.json at preview quality (720p) with the existing Remotion pipeline, then extracts per-scene representative frames (scene midpoints) and a contact sheet for visual critique, and measures the mix loudness (EBU R128). ' +
       'Slow (minutes); reports progress. Read the returned frame images yourself before critiquing — do not judge blind.',
     inputSchema: {
       type: 'object',
@@ -227,11 +229,13 @@ export const directorTools = [
       });
       progress?.(80, 'extracting review frames');
       const reviewDir = join(outDir, `round-${round}`);
-      const extraction = await extractPreviewFrames(await findFfmpeg(), preview, scenes, reviewDir);
+      const ffmpeg = await findFfmpeg();
+      const extraction = await extractPreviewFrames(ffmpeg, preview, scenes, reviewDir);
+      const loudness = await measureLoudness(ffmpeg, preview).catch(() => null);
       const state = await writeState(ctx, project, {
         phase: 'previewed',
         round,
-        lastPreview: { video: preview, resolution: done.resolution, frames: extraction.frames, contactSheet: extraction.contactSheet, scenesHash: scenesFingerprint(scenes) },
+        lastPreview: { video: preview, resolution: done.resolution, frames: extraction.frames, contactSheet: extraction.contactSheet, scenesHash: scenesFingerprint(scenes), loudness },
         approvedScenesHash: null,
       });
       // Remote agents cannot read local paths; attach the critique material as
@@ -240,7 +244,7 @@ export const directorTools = [
       if (images) {
         progress?.(92, 'encoding review frames for transport');
         try {
-          mcpImages = await inlineReviewImages(await findFfmpeg(), extraction);
+          mcpImages = await inlineReviewImages(ffmpeg, extraction);
         } catch (error) {
           log(`director preview could not inline images: ${error.message}`);
         }
@@ -253,7 +257,8 @@ export const directorTools = [
         frames: extraction.frames,
         contactSheet: extraction.contactSheet,
         inlineImageCount: mcpImages.length,
-        findings: runDirectorChecks(scenes, { aspect: stateBefore?.aspect || brand.visual.aspect }),
+        loudness,
+        findings: [...runDirectorChecks(scenes, { aspect: stateBefore?.aspect || brand.visual.aspect }), ...loudnessFindings(loudness)],
         mcpImages,
         artifacts: { preview: reviewDir, state: paths.state },
         nextStep: nextStepFor(state),
@@ -377,7 +382,8 @@ export const directorTools = [
           throw new ToolError(`findings[${index}].note must be a non-empty string`);
         }
       }
-      const deterministic = runDirectorChecks(scenes, { aspect: stateBefore.aspect }).map((finding) => ({ ...finding, source: 'deterministic' }));
+      const deterministic = [...runDirectorChecks(scenes, { aspect: stateBefore.aspect }), ...loudnessFindings(stateBefore.lastPreview?.loudness)]
+        .map((finding) => ({ ...finding, source: 'deterministic' }));
       const hash = scenesFingerprint(scenes);
       if (stateBefore.lastPreview?.scenesHash && stateBefore.lastPreview.scenesHash !== hash) {
         deterministic.unshift({
@@ -474,6 +480,8 @@ export const directorTools = [
         plan,
         progress,
       });
+      const ffmpeg = await findFfmpeg();
+      const finalLoudness = await measureLoudness(ffmpeg, output).catch(() => null);
       const finalState = await writeState(ctx, project, {
         phase: 'done',
         finalOutput: output,
@@ -485,7 +493,9 @@ export const directorTools = [
         resolution: done.resolution,
         watermark: done.watermark,
         rounds: Math.max(1, state.round || 1),
-        probe: await probeMedia(await findFfmpeg(), output).catch(() => ({})),
+        probe: await probeMedia(ffmpeg, output).catch(() => ({})),
+        loudness: finalLoudness,
+        findings: loudnessFindings(finalLoudness),
         artifacts: { state: directorPaths(ctx, project).state },
         nextStep: nextStepFor(finalState),
       };
