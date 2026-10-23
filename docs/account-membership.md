@@ -12,6 +12,7 @@ App 内登录与会员状态读取。支付全部由 webclaw-store 负责，App 
 | 会员模型与 UI 门控（纯 TS，有单测） | `src/lib/membership.ts` |
 | 状态与生命周期（zustand） | `src/store/useAccountStore.ts` |
 | UI | `src/components/AccountPanel.tsx`（侧栏卡片、设置页「账户与会员」、门控提示） |
+| 在线客服（统一客服 Widget + 票据中转） | 见 [support-widget.md](support-widget.md) |
 | 账户服务（Cloudflare Worker） | `account-service/`（部署说明见 `account-service/README.md`） |
 
 ## 架构

@@ -14,7 +14,8 @@
     "tauri:build": "node scripts/tauri.mjs build",
     "remotion:preview": "remotion preview remotion/src/index.ts",
     "remotion:render": "node scripts/render.mjs",
-    "test": "node --test \"tests/*.test.mjs\" \"account-service/test/*.test.mjs\""
+    "test": "node --test --test-force-exit \"tests/*.test.mjs\" \"account-service/test/*.test.mjs\"",
+    "check:release": "node scripts/check-release-security.mjs"
   },
   "dependencies": {
     "@duyquangnvx/edge-tts": "^3.0.3",
@@ -25,6 +26,7 @@
     "@tauri-apps/api": "^2.9.0",
     "@tauri-apps/plugin-dialog": "^2.4.0",
     "@tauri-apps/plugin-fs": "^2.4.0",
+    "@webcode/support-ui": "file:vendor/webcode-support-ui-0.1.6.tgz",
     "ai": "6.0.300",
     "ffmpeg-static": "^5.2.0",
     "lucide-react": "^0.468.0",
@@ -40,6 +42,7 @@
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.3",
+    "jsdom": "^16.7.0",
     "typescript": "^5.6.3",
     "vite": "^5.4.11"
   }

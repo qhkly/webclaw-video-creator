@@ -34,7 +34,7 @@ use super::chatgpt_commands::launch_browser;
 const AUTH_ORIGIN: &str = "https://auth.qhkly.com";
 /// TODO(register): needs `AUTH_CLIENTS_VIDEO_CREATOR` on auth.qhkly.com, a public
 /// client with one exact redirect URI per loopback port (docs/account-membership.md).
-const AUTH_CLIENT_ID: &str = "video-creator";
+pub(crate) const AUTH_CLIENT_ID: &str = "video-creator";
 /// Auth matches redirect URIs exactly, so the ports are fixed and each one is
 /// registered. Kept clear of AI Studio (18811-18830) and the launcher API (18791).
 pub const LOOPBACK_PORTS: [u16; 3] = [18861, 18862, 18863];
@@ -80,7 +80,7 @@ fn clean_base_url(value: &str) -> Option<String> {
     (!value.is_empty()).then(|| value.to_string())
 }
 
-fn auth_origin() -> String {
+pub(crate) fn auth_origin() -> String {
     debug_override("VIDEO_CREATOR_AUTH_ORIGIN").unwrap_or_else(|| AUTH_ORIGIN.to_string())
 }
 
@@ -203,12 +203,15 @@ struct AppSession {
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
-struct StoredAccount {
-    user: Option<AccountUser>,
+pub(crate) struct StoredAccount {
+    pub(crate) user: Option<AccountUser>,
     session: Option<AppSession>,
     membership: Option<Membership>,
     membership_checked_at: Option<u64>,
     signed_in_at: u64,
+    /// Auth's rotating customer-support grant (`sg1_…`, see support_commands.rs). Per-user and
+    /// revocable, not a signing key; it can only be traded at auth.qhkly.com for a 10-minute ticket.
+    pub(crate) support_grant: Option<String>,
 }
 
 /// Where the membership answer currently comes from.
@@ -284,12 +287,12 @@ fn with_runtime<T>(f: impl FnOnce(&mut Runtime) -> T) -> T {
 }
 
 /// Serializes every read-modify-write of account.json (login, refresh, logout).
-fn io_lock() -> &'static tokio::sync::Mutex<()> {
+pub(crate) fn io_lock() -> &'static tokio::sync::Mutex<()> {
     static LOCK: OnceLock<tokio::sync::Mutex<()>> = OnceLock::new();
     LOCK.get_or_init(|| tokio::sync::Mutex::new(()))
 }
 
-fn now_secs() -> u64 {
+pub(crate) fn now_secs() -> u64 {
     SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0)
 }
 
@@ -442,7 +445,7 @@ fn account_path<R: TauriRuntime>(app: &AppHandle<R>) -> Result<PathBuf, String> 
         .map_err(|error| format!("无法定位应用数据目录: {error}"))
 }
 
-async fn load<R: TauriRuntime>(app: &AppHandle<R>) -> StoredAccount {
+pub(crate) async fn load<R: TauriRuntime>(app: &AppHandle<R>) -> StoredAccount {
     let Ok(path) = account_path(app) else {
         return StoredAccount::default();
     };
@@ -452,7 +455,7 @@ async fn load<R: TauriRuntime>(app: &AppHandle<R>) -> StoredAccount {
     }
 }
 
-async fn save(app: &AppHandle, account: &StoredAccount) -> Result<(), String> {
+pub(crate) async fn save(app: &AppHandle, account: &StoredAccount) -> Result<(), String> {
     let path = account_path(app)?;
     if let Some(dir) = path.parent() {
         tokio::fs::create_dir_all(dir).await.map_err(|error| format!("无法创建数据目录: {error}"))?;
@@ -536,7 +539,7 @@ pub fn start_background_sync(app: AppHandle) {
 
 // ---- HTTP ----
 
-fn http_client() -> Result<reqwest::Client, String> {
+pub(crate) fn http_client() -> Result<reqwest::Client, String> {
     reqwest::Client::builder()
         .timeout(HTTP_TIMEOUT)
         .user_agent(concat!("webclaw-video-creator/", env!("CARGO_PKG_VERSION")))
@@ -632,6 +635,8 @@ struct ExchangeResponse {
     name: Option<String>,
     image: Option<String>,
     id_token: Option<String>,
+    /// Present because the login asks for it (`support_grant: true`); null when Auth has no support registration.
+    support_grant: Option<String>,
 }
 
 // ---- Login ----
@@ -721,6 +726,7 @@ async fn complete_login(app: &AppHandle, code: &str, redirect_uri: &str, verifie
             "client_id": AUTH_CLIENT_ID,
             "redirect_uri": redirect_uri,
             "code_verifier": verifier,
+            "support_grant": true,
         }));
     let body = send_json(exchange).await.map_err(|error| match error {
         ApiError::Unauthorized => "登录服务拒绝了本应用（client 未登记）".to_string(),
@@ -740,6 +746,7 @@ async fn complete_login(app: &AppHandle, code: &str, redirect_uri: &str, verifie
             image: identity.image,
         }),
         signed_in_at: now,
+        support_grant: identity.support_grant.filter(|grant| super::support_commands::is_grant(grant)),
         ..StoredAccount::default()
     };
     let mut phase = None;
@@ -848,6 +855,8 @@ pub async fn account_logout(app: AppHandle) -> Result<AccountView, String> {
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
             Err(error) => return Err(format!("无法清除登录状态: {error}")),
         }
+        super::support_commands::clear_ticket_cache();
+        super::support_commands::revoke_in_background(stored.support_grant);
         stored.session
     };
     with_runtime(|rt| {
@@ -1067,6 +1076,7 @@ mod tests {
             membership: Some(member(true)),
             membership_checked_at: Some(100),
             signed_in_at: 1,
+            support_grant: Some("sg1_secret-support-grant".into()),
         };
         let rt = Runtime {
             login_status: "idle",
@@ -1083,6 +1093,7 @@ mod tests {
         assert_eq!(view.limits, FREE_LIMITS);
         let text = serde_json::to_string(&view).unwrap();
         assert!(!text.contains("secret-session-token"));
+        assert!(!text.contains("sg1_secret-support-grant"), "the support grant never reaches the UI");
         assert!(text.contains("\"phase\":\"fresh\""));
     }
 

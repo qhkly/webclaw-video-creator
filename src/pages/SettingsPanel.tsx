@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import type { Aspect, Resolution } from '../constants/aspect';
 import ChatgptConnectionCard from '../components/ChatgptConnectionCard';
 import { AccountSection } from '../components/AccountPanel';
+import { SupportSection } from '../components/SupportWidget';
 import { getSettings, saveSettings } from '../lib/tauri-bridge';
 import { DEFAULT_ASR, useVideoStore } from '../store/useVideoStore';
 import type { AsrSettings, CaptionSettings, CreatorSettings } from '../types';
@@ -50,6 +51,7 @@ export default function SettingsPanel() {
         </div>
       </header>
       <AccountSection />
+      <SupportSection />
       <div className="settings-grid">
         <div className="card settings-card">
           <span className="field-label">

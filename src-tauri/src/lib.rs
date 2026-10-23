@@ -14,6 +14,7 @@ use commands::cutter_commands::{allow_media_preview, export_cut, transcribe_vide
 use commands::ffmpeg_commands::combine_audio_video;
 use commands::render_commands::{render_video, save_scenes_json};
 use commands::settings_commands::{get_settings, save_settings};
+use commands::support_commands::support_ticket;
 use commands::tts_commands::generate_tts;
 use tauri::Manager;
 
@@ -65,6 +66,7 @@ pub fn run() {
             account_refresh,
             account_open_checkout,
             account_open_store_account,
+            support_ticket,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

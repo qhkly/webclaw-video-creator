@@ -188,6 +188,21 @@ const enUS: typeof zhCN = {
     help: 'In ChatGPT, add a custom MCP app on this tunnel with authentication "None". Credentials stay on this machine and are never logged.',
     log: 'Log',
   },
+  support: {
+    title: 'Contact support',
+    desc: 'Questions or feedback? Our AI assistant answers first and can hand you to a person. Screenshots are supported.',
+    open: 'Open support',
+    signIn: 'Sign in to contact support',
+    unread: (count: number) => `${count} unread`,
+    state: {
+      checking: 'Checking support status…',
+      ready: 'Support is ready. Your chat history is tied to your WebClaw account.',
+      login_required: 'Sign in with your WebClaw account to contact support.',
+      reauth_required: 'Sign in once more to enable support (your earlier sign-in has no support grant).',
+      not_enabled: 'Online support is not available yet. Please try again later.',
+      unavailable: 'Cannot reach the support service right now. Please try again later.',
+    },
+  },
   account: {
     title: 'Account & membership',
     desc: 'Sign in with your WebClaw account; purchases and payment happen in the WebClaw Store.',

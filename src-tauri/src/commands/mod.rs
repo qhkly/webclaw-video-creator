@@ -7,4 +7,5 @@ pub mod ffmpeg_commands;
 pub mod node_env;
 pub mod render_commands;
 pub mod settings_commands;
+pub mod support_commands;
 pub mod tts_commands;

@@ -9,6 +9,7 @@ import ScriptEditor from './pages/ScriptEditor';
 import SettingsPanel from './pages/SettingsPanel';
 import ThemePanel from './components/ThemePanel';
 import { AccountRailCard } from './components/AccountPanel';
+import { SupportHost } from './components/SupportWidget';
 import { startAccountSync } from './store/useAccountStore';
 import { getSettings } from './lib/tauri-bridge';
 import { listProjects, projectSnapshot, saveProjectScenes, type ProjectSummary } from './lib/agent-bridge';
@@ -161,6 +162,7 @@ export default function App() {
         </div>
         <div className="tb-right">
           <ThemePanel />
+          <SupportHost />
           {inSceneWorkflow && activePage !== 'preview' && (
             <button className="btn btn-ghost btn-sm" onClick={() => setActivePage('preview')}>
               <Play size={14} />

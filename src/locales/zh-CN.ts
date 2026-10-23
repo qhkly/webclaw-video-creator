@@ -186,6 +186,21 @@ const zhCN = {
     help: '在 ChatGPT 添加自定义 MCP 应用时选择这条隧道，认证方式选「无」。凭据只保存在本机，不会写入日志。',
     log: '日志',
   },
+  support: {
+    title: '联系客服',
+    desc: '遇到问题或有建议？AI 客服先答复，需要时可转人工，支持发送截图。',
+    open: '打开客服',
+    signIn: '登录后联系客服',
+    unread: (count: number) => `${count} 条未读`,
+    state: {
+      checking: '正在确认客服状态…',
+      ready: '客服已就绪。聊天记录与你的 WebClaw 账号绑定。',
+      login_required: '登录 WebClaw 账号后即可联系客服。',
+      reauth_required: '请重新登录一次以启用客服（旧登录没有客服授权）。',
+      not_enabled: '在线客服暂未开通，请稍后再试。',
+      unavailable: '暂时无法连接客服服务，请稍后再试。',
+    },
+  },
   account: {
     title: '账户与会员',
     desc: '使用 WebClaw 统一账号登录；购买与支付在 WebClaw Store 完成。',
