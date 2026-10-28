@@ -12,7 +12,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 /** Bump together with vendor/webcode-support-ui-*.tgz (docs/support-widget.md). */
-export const SUPPORT_UI_TGZ = { file: 'vendor/webcode-support-ui-0.1.6.tgz', sha256: 'de132becced2b958e8a26ec083008ec22f92c5210aa55f652d0479f5a831de70' };
+export const SUPPORT_UI_TGZ = { file: 'vendor/webcode-support-ui-0.1.6.tgz', sha256: '342b1f3a8124d1705ce4c2f7d47a924c272c12f8171ac42d7993249178919975' };
 
 const SHIPPED = ['src', 'src-tauri/src', 'src-tauri/tauri.conf.json', 'src-tauri/capabilities', 'remotion/src', 'mcp', 'scripts', 'index.html', 'dist'];
 const SKIP_DIRS = new Set(['node_modules', 'target', '.git', 'assets']);

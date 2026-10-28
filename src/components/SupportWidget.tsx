@@ -13,11 +13,13 @@ const SUPPORT_ORIGIN = import.meta.env.DEV ? (import.meta.env.VITE_SUPPORT_ORIGI
  * Renders nothing itself. Account switch / sign-out resets the thread; theme changes re-skin it.
  */
 export function SupportHost() {
-  const { locale } = useI18n();
+  const { locale, t } = useI18n();
   const userId = useAccountStore((state) => state.account?.user?.authUserId ?? null);
   const runtime = useRef<SupportRuntime | null>(null);
   const lang = useRef<SupportLang>(locale);
+  const translations = useRef(t);
   lang.current = locale;
+  translations.current = t;
 
   useEffect(() => {
     const { setAvailability, setUnread, setOpener } = useSupportStore.getState();
@@ -37,6 +39,7 @@ export function SupportHost() {
         requestTicket: requestSupportTicket,
         document,
         lang: lang.current,
+        translate: (key) => key === 'humanWaitHint' ? translations.current.support.humanWaitHint : undefined,
         origin: SUPPORT_ORIGIN,
         onUnreadChange: setUnread,
       });

@@ -23,7 +23,8 @@ WebClaw Video Creator 是对外销售的桌面产品（官网、会员、store �
 - 登录请求新增 `support_grant: true`（只在显式为 true 时 Auth 才发；没登记 support 的环境得到 `null`，整个客服入口降级为「暂未开通」）。
 - 退出登录：删除 `account.json`、清票据缓存、尽力调用 `/api/support/grant/revoke`；前端销毁 Widget。
 - 账号切换：`SupportHost` 以 `authUserId` 为依赖重建 Widget；Worker 的 uid 由 Auth 对 `(app, usr_…)` 做 HMAC 得出，不同账号会话完全隔离。
-- 主题：Widget 跟随应用 `<html data-theme>`（亮/暗）和 `--accent`/`--r-md`，ThemePanel 改动时 `syncTheme()`，不重建 DOM、不断会话。语言跟随应用 zh-CN / en-US。
+- 主题：Widget 跟随应用 `<html data-theme>`（亮/暗）和 `--accent`/`--r-md`，ThemePanel 改动时 `syncTheme()`，不重建 DOM、不断会话。语言跟随应用 zh-CN / en-US；宿主翻译回调提供 `humanWaitHint`，目前覆盖本应用实际支持的中英文。
+- 共享 UI：按上游 `webcode-support/main` 的 `010f5fb`、`26f9613` 重打 `@webcode/support-ui` 0.1.6 分发包；等待人工时显示可先尝试 AI 的轻提示，人工回复后隐藏。宿主缺词时 Widget 自带中英文 fallback。
 - 附件：图片（png/jpeg/gif/webp ≤2MB）与 webm（≤4MB），最多 4 个；规则以 Worker 为准。
 - 未读：收起时只查 `/api/unread`，不会把回复标成已读；设置页显示未读数。
 
@@ -34,7 +35,7 @@ WebClaw Video Creator 是对外销售的桌面产品（官网、会员、store �
 | 票据中转（Rust） | `src-tauri/src/commands/support_commands.rs`；`account_commands.rs`（登录领 grant、退出吊销） |
 | 纯 TS（可测） | `src/lib/support.ts`、`src/lib/support-bridge.ts`、`src/store/useSupportStore.ts` |
 | UI | `src/components/SupportWidget.tsx`（`SupportHost` 挂在 `App`，`SupportSection` 在设置页） |
-| 测试 | `tests/support.test.mjs`（对**真实 Worker**）、`tests/support-harness.mjs`、`tests/release-security.test.mjs`、Rust 单测 |
+| 测试 | `tests/support.test.mjs`（对**真实 Worker**；覆盖转人工提示的中英文与显示/隐藏）、`tests/support-harness.mjs`、`tests/release-security.test.mjs`、Rust 单测 |
 | 发行检查 | `scripts/check-release-security.mjs`（`npm run check:release`，构建后会同时扫描 `dist/`） |
 
 ## 测试怎么跑

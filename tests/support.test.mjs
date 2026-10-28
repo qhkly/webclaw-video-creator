@@ -10,6 +10,8 @@ import {
 import {
   availabilityFromError, createSupportRuntime, probeSupport, supportThemeFromHost, ticketErrorCode,
 } from '../src/lib/support.ts';
+import zhCN from '../src/locales/zh-CN.ts';
+import enUS from '../src/locales/en-US.ts';
 
 const require = createRequire(import.meta.url);
 const { JSDOM } = require('jsdom');
@@ -51,7 +53,7 @@ test('theme follows the app: accent hex only, radius clamped, colour scheme from
 
 // ---- Real Worker ----
 
-function setup({ mode = 'ticket_only' } = {}) {
+function setup({ mode = 'ticket_only', lang = 'zh-CN' } = {}) {
   const auth = authSimulator();
   const h = makeEnv({ SUPPORT_TICKET_TENANTS: auth.tenants(mode) });
   const dom = new JSDOM('<!doctype html><html data-theme="light"><head><title>Video Creator</title></head><body></body></html>', { pretendToBeVisual: true });
@@ -63,7 +65,8 @@ function setup({ mode = 'ticket_only' } = {}) {
   };
   const unread = [];
   const rt = createSupportRuntime({
-    requestTicket, document: dom.window.document, lang: 'zh-CN', origin: 'https://support.test',
+    requestTicket, document: dom.window.document, lang, origin: 'https://support.test',
+    translate: (key) => key === 'humanWaitHint' ? (lang === 'en-US' ? enUS : zhCN).support.humanWaitHint : undefined,
     fetch: h.fetch, push: 'none', onUnreadChange: (n) => unread.push(n),
   });
   const session = rt.session;
@@ -115,17 +118,36 @@ test('attachment: png goes up, is stored under this user only, and a forged key 
   t.rt.destroy();
 });
 
-test('handoff to a human and back', { skip: skipReason }, async () => {
+test('handoff to a human shows the host-language wait hint, then hides it when AI resumes', { skip: skipReason }, async () => {
   const t = setup();
   await begin(t);
   await t.session.send({ text: '我想找人工', lang: 'zh-CN' });
   await t.session.requestHuman({ lang: 'zh-CN' });
   assert.equal(t.session.store.getState().supportMode, 'human_requested');
+  t.rt.open();
+  await flush();
+  const hint = t.shadow().querySelector('.wait-hint');
+  assert.equal(hint.hidden, false);
+  assert.equal(hint.textContent, zhCN.support.humanWaitHint, 'host dictionary supplies the Chinese translation');
   const thread = t.h.db.prepare('SELECT ai_state, human_requested_at FROM threads WHERE app = ? AND uid = ?').get(APP, t.auth.uidOf(1));
   assert.equal(thread.ai_state, 'human');
   assert.ok(thread.human_requested_at, 'the Worker recorded the request');
   await t.session.resumeAi({ lang: 'zh-CN' });
   assert.equal(t.session.store.getState().supportMode, 'ai');
+  await flush();
+  assert.equal(hint.hidden, true, 'wait hint disappears when returning to AI');
+  t.rt.destroy();
+});
+
+test('shared wait hint uses the host English translation', { skip: skipReason }, async () => {
+  const t = setup({ lang: 'en-US' });
+  await begin(t);
+  await t.session.requestHuman({ lang: 'en-US' });
+  t.rt.open();
+  await flush();
+  const hint = t.shadow().querySelector('.wait-hint');
+  assert.equal(hint.hidden, false);
+  assert.equal(hint.textContent, enUS.support.humanWaitHint);
   t.rt.destroy();
 });
 

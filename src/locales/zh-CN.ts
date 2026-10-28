@@ -189,6 +189,7 @@ const zhCN = {
   support: {
     title: '联系客服',
     desc: '遇到问题或有建议？AI 客服先答复，需要时可转人工，支持发送截图。',
+    humanWaitHint: '人工客服回复可能需要一些时间，你可以先试试 AI 客服，也许能更快解决问题。',
     open: '打开客服',
     signIn: '登录后联系客服',
     unread: (count: number) => `${count} 条未读`,

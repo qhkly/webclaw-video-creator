@@ -76,6 +76,8 @@ export interface SupportRuntimeOptions {
   requestTicket: RequestTicket;
   document: Document;
   lang: SupportLang;
+  /** Host translation lookup for keys such as the shared widget's humanWaitHint. */
+  translate?: (key: string) => string | undefined;
   /** Defaults to https://support.qhkly.com; tests and debug builds point at a local Worker. */
   origin?: string;
   fetch?: typeof fetch;
@@ -134,6 +136,7 @@ export function createSupportRuntime(options: SupportRuntimeOptions): SupportRun
     document: doc,
     mode: 'floating',
     lang,
+    t: options.translate,
     subtitle: SUPPORT_SUBTITLE,
     theme: supportThemeFromHost(doc),
     attachments: { accept: 'image/png,image/jpeg,image/gif,image/webp,video/webm', maxFiles: 4 },

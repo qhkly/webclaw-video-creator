@@ -191,6 +191,7 @@ const enUS: typeof zhCN = {
   support: {
     title: 'Contact support',
     desc: 'Questions or feedback? Our AI assistant answers first and can hand you to a person. Screenshots are supported.',
+    humanWaitHint: 'A human agent may take a while to reply. You can try the AI assistant first — it may solve your problem faster.',
     open: 'Open support',
     signIn: 'Sign in to contact support',
     unread: (count: number) => `${count} unread`,
